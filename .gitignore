@@ -1,0 +1,92 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+.ENV
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Claude Code
+.claude/
+
+# Model checkpoints and experiments (large files)
+checkpoints/
+experiments/
+*.pth
+*.pkl
+*.model
+
+# TensorBoard logs
+runs/
+
+# HuggingFace cache
+hf_cache/
+
+# Data files (potentially large)
+data/*.csv
+data/*.parquet
+data/*.json
+!data/sample_data.csv
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# API keys and secrets
+config_secrets.py
+api_keys.json
+
+# Large datasets
+*.h5
+*.hdf5

@@ -1,0 +1,14 @@
+torch
+torchvision
+torchaudio
+torch-geometric
+transformers
+yfinance
+pandas
+numpy
+scikit-learn
+pandas_ta
+requests
+tqdm
+matplotlib
+tensorboard
