@@ -51,11 +51,10 @@ runs/
 # HuggingFace cache
 hf_cache/
 
-# Data files (potentially large)
-data/*.csv
-data/*.parquet
-data/*.json
-!data/sample_data.csv
+# Data files - included in repo (small size ~2.7MB)
+# data/*.csv
+# data/*.parquet
+# data/*.json
 
 # OS generated files
 .DS_Store
