@@ -136,12 +136,34 @@ class AdvancedTrainer:
         """Load and prepare the training data"""
         logger.info("Loading training data...")
         
-        # Load processed data
-        if not os.path.exists('data/training_data.csv'):
-            logger.error("Training data not found. Please run data preparation first.")
-            raise FileNotFoundError("data/training_data.csv not found")
+        # Load processed data - try comprehensive dataset first, fallback to basic
+        data_files = [
+            'data/training_data_2020_2024_complete.csv',  # Comprehensive 2020-2024 dataset
+            'data/training_data_with_social.csv',         # Enhanced with social features
+            'data/training_data.csv'                      # Basic dataset (fallback)
+        ]
         
-        df = pd.read_csv('data/training_data.csv')
+        df = None
+        data_file_used = None
+        
+        for data_file in data_files:
+            if os.path.exists(data_file):
+                try:
+                    df = pd.read_csv(data_file)
+                    data_file_used = data_file
+                    logger.info(f"Loaded training data from: {data_file}")
+                    break
+                except Exception as e:
+                    logger.warning(f"Failed to load {data_file}: {e}")
+        
+        if df is None:
+            logger.error("No training data found. Please run data preparation first.")
+            raise FileNotFoundError("No training data files found")
+        
+        logger.info(f"Training dataset: {len(df)} records from {data_file_used}")
+        logger.info(f"Features: {len(df.columns)} total")
+        logger.info(f"Date range: {df['Date'].min()} to {df['Date'].max()}")
+        logger.info(f"Tickers: {sorted(df['Ticker'].unique())}")
         logger.info(f"Loaded {len(df)} training samples")
         
         # Feature columns (exclude non-numeric)
