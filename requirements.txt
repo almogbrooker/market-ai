@@ -12,3 +12,11 @@ requests
 tqdm
 matplotlib
 tensorboard
+
+# Social media APIs and sentiment analysis
+praw
+tweepy
+vaderSentiment
+textblob
+beautifulsoup4
+nltk
