@@ -1,0 +1,125 @@
+❗ Still broken / inconsistent (fix these next)
+
+Meta-model uses fake zeros (no OOF stacking)
+
+In _train_meta_model(), you still fill fold_preds = np.zeros(...).
+
+Fix: For each base model and CV fold, store the out-of-fold predictions aligned to the original X indices for that fold’s test set. After CV finishes, you must have a full OOF column per model (e.g., ts_patchtst, ts_itransformer, ts_gru). Train LightGBM on these OOF columns + meta_features for exactly the same rows.
+
+Scaling mismatch at inference inside CV
+
+You scale data inside _train_single_model(), but when you later call _predict_model(trained_model, X_test_seq) you pass the unscaled X_test_seq (the scaling was local to the training function).
+
+Fix: Move scaling outside _train_single_model() at the fold level (fit scaler on train, transform both train & test before creating the DataLoaders and before computing predictions). Also persist the scaler per fold (you’ll need it later for backtests/live).
+
+Embargo logic doesn’t actually change the train set
+
+Because you cap train by train_end_date = test_start_date − purge_days, excluding the post-test embargo window from the train mask is redundant (those dates are after train_end_date anyway).
+
+Fix: Keep purge (pre-test) as you do. You can remove the post-test embargo from the train mask or, if you want textbook LdP behavior, apply embargo symmetrically around the test period when building adjacent folds.
+
+Meta-model calibration leakage
+
+You calibrate on the same OOF table you trained the meta-model on. Isotonic CV helps, but it’s still optimistic.
+
+Fix: Split the OOF table by date into meta-train (e.g., 80%) and a small OOF-holdout (20%). Train LightGBM on meta-train; run CalibratedClassifierCV on the holdout only. Save both.
+
+Saving the meta-model is incorrect
+
+torch.save(self.meta_model) won’t work for a LightGBM object.
+
+Fix:
+
+Save LGBM via meta_model.save_model(".../meta_model.txt") (or pickle with joblib).
+
+Save the calibrated wrapper separately with joblib.dump.
+
+Keep TS PyTorch models with torch.save as you do.
+
+No class imbalance handling for meta-labels
+
+Dead-zone often dominates (lots of zeros).
+
+Fix: Pass class_weight/is_unbalance=True (or custom weights) to LightGBM, or downsample the 0-class for the meta-model. This usually boosts Precision@K.
+
+No seeds → non-reproducible results
+
+Fix: Set seeds for numpy, torch (and cudnn.deterministic=True, benchmark=False). Log them.
+
+Metrics don’t use OOF for base models
+
+You report fold metrics, but you don’t compute a global OOF IC/Precision@K per base model.
+
+Fix: Once you build OOF predictions, compute and log overall OOF metrics per model; these are the only honest numbers to compare with the meta-model.
+
+➕ Additions for production quality
+
+Persist per-fold artifacts
+
+Save for each base model & fold: state_dict, scaler, feature list, seq length, and the list of test indices used in that fold (for auditability).
+
+Save the OOF prediction frame you built (Parquet) — invaluable for debugging & re-training meta-models fast.
+
+Meta-model thresholds by regime
+
+Your thresholds are static.
+
+Improve: Learn thresholds on the OOF-holdout conditioned on regime features (e.g., VIX or your regime flags). Grid over (buy_prob, sell_prob) to maximize expected net return (include fees/slippage).
+
+Stricter NaN/Inf guards
+
+Add a single helper that asserts np.isfinite on every feature block before sequencing; log the column names with violations.
+
+Training-time early diagnostics
+
+Log per-epoch distribution stats of predictions (mean, std, % clipped) — spikes or collapse show up immediately.
+
+Backtester integration
+
+Ensure your backtester reads calibrated probabilities and applies the regime-specific thresholds you saved.
+
+Use the same scaler used at training time for any live/OOF inference. Mismatched scaling will quietly destroy performance.
+
+🧭 Minimal, step-by-step changes (in place)
+
+Before CV loop
+
+Create a dict oof_preds = {model_name: pd.Series(index=X.index, dtype=float) for model in models}.
+
+Inside CV fold (for each model)
+
+Fit scaler on X_train features (not including Date/Ticker).
+
+Transform both X_train and X_test before sequence creation.
+
+Train the model.
+
+Predict on the scaled X_test sequences.
+
+Write those predictions into oof_preds[model_name].loc[test_index] = preds.
+
+After CV completes
+
+Concatenate OOF columns into a DataFrame oof_ts = pd.concat([oof_preds[m].rename(f"ts_{m}") for m in models], axis=1).
+
+Join oof_ts with meta_features on index; drop rows with any NA in OOF.
+
+Train LightGBM on this joined OOF table; calibrate on the holdout split.
+
+Save: per-fold scalers, model weights, oof_ts.parquet, meta_features_used.json, meta_model.txt, calibrated_model.pkl, regime_thresholds.json.
+
+Replace meta-model zeros
+
+Remove the placeholder zeros path entirely; the meta-model should only see real OOF predictions.
+
+📊 What to expect after fixes
+
+Higher and stable OOF IC for base models (because predictions and scaling are consistent).
+
+Meta-model > best single model on OOF Precision@K (often a few bps of IC gain).
+
+Fewer NaN warnings and better generalization (proper scaling + guardrails).
+
+Reproducible experiments (seeds + saved OOF tables).
+
+✅ Quick validation checklist
