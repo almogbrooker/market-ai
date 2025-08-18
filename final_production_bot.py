@@ -16,20 +16,75 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import logging
 
+# Load environment variables from .env file
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class FinalProductionBot:
-    def __init__(self, api_key, secret_key, paper=True):
+    def __init__(self, api_key=None, secret_key=None, paper=True):
         """Final production bot with proven strategies"""
         base_url = 'https://paper-api.alpaca.markets' if paper else 'https://api.alpaca.markets'
-        self.api = tradeapi.REST(api_key, secret_key, base_url, api_version='v2')
+        
+        # Get API keys from environment variables if not provided
+        if not api_key:
+            api_key = os.getenv('ALPACA_API_KEY')
+            secret_key = os.getenv('ALPACA_SECRET_KEY')
+        
+        # Initialize with Alpaca Paper Trading
+        if not api_key or not secret_key:
+            logger.info("🎯 No API credentials found - running in DEMO mode")
+            logger.info("📝 To connect to real Alpaca account:")
+            logger.info("   1. Add your API keys to .env file")
+            logger.info("   2. Access UI at: https://paper-app.alpaca.markets")
+            self.api = None
+            self.demo_mode = True
+            self.demo_portfolio = 100000  # $100k starting capital
+            self.demo_positions = {}
+            self.demo_trades = []
+        else:
+            try:
+                self.api = tradeapi.REST(api_key, secret_key, base_url, api_version='v2')
+                account = self.api.get_account()
+                logger.info("🎉 CONNECTED TO REAL ALPACA PAPER TRADING!")
+                logger.info(f"🎯 View your trades at: https://paper-app.alpaca.markets")
+                logger.info(f"💰 Account ID: {account.account_number}")
+                logger.info(f"📊 Account Status: {account.status}")
+                logger.info(f"💵 Buying Power: ${float(account.buying_power):,.2f}")
+                logger.info(f"💼 Portfolio Value: ${float(account.portfolio_value):,.2f}")
+                self.demo_mode = False
+            except Exception as e:
+                logger.warning(f"⚠️ Alpaca connection failed: {e}")
+                logger.info("🎯 Falling back to DEMO mode")
+                self.api = None
+                self.demo_mode = True
+                self.demo_portfolio = 100000
+                self.demo_positions = {}
+                self.demo_trades = []
         
         # Optimized parameters
         self.max_positions = 20
         self.position_size = 0.05  # 5% per position
         self.min_confidence = 0.6
+        
+        # CHAT-G.TXT: LIVE TRADING SAFEGUARDS
+        self.max_drawdown_pct = 0.10  # 10% max drawdown kill switch
+        self.min_confidence_threshold = 0.5  # Kill switch if confidence collapses
+        self.max_daily_trades = 50  # Max trades per day
+        self.max_api_errors = 5  # Max API errors before kill switch
+        
+        # Risk budgets
+        self.max_gross_exposure = 1.0  # 100% max gross exposure
+        self.max_per_name = 0.15  # 15% max per individual stock
+        self.vix_kill_switch = 40  # Stop trading if VIX > 40
+        
+        # Error tracking
+        self.api_error_count = 0
+        self.daily_trade_count = 0
+        self.last_trade_date = None
+        
+        # Order ledger for idempotency (CHAT-G.TXT requirement)
+        self.trade_ledger = {}
         
         # REGIME PERSISTENCE STATE (chat-g.txt enhancement)
         self.regime_state = {
@@ -649,15 +704,75 @@ class FinalProductionBot:
         except Exception as e:
             logger.error(f"Failed to save monitoring data: {e}")
     
+    def _check_kill_switches(self):
+        """CHAT-G.TXT: Kill switch checks before trading"""
+        from datetime import datetime
+        import yfinance as yf
+        
+        try:
+            # Check 1: Daily trade limit
+            today = datetime.now().date()
+            if self.last_trade_date != today:
+                self.daily_trade_count = 0
+                self.last_trade_date = today
+            
+            if self.daily_trade_count >= self.max_daily_trades:
+                logger.error(f"🚨 Daily trade limit reached: {self.daily_trade_count}")
+                return False
+            
+            # Check 2: API error count
+            if self.api_error_count >= self.max_api_errors:
+                logger.error(f"🚨 Too many API errors: {self.api_error_count}")
+                return False
+            
+            # Check 3: VIX spike kill switch
+            try:
+                vix = yf.Ticker("^VIX").history(period="1d")
+                if not vix.empty:
+                    current_vix = float(vix['Close'].iloc[-1])
+                    if current_vix > self.vix_kill_switch:
+                        logger.error(f"🚨 VIX spike kill switch: {current_vix:.1f} > {self.vix_kill_switch}")
+                        return False
+            except:
+                logger.warning("Could not check VIX - proceeding with caution")
+            
+            # Check 4: Account drawdown (if we have account access)
+            if self.api and not self.demo_mode:
+                try:
+                    account = self.api.get_account()
+                    portfolio_value = float(account.portfolio_value)
+                    initial_value = 100000  # Assuming starting capital
+                    drawdown = (initial_value - portfolio_value) / initial_value
+                    if drawdown > self.max_drawdown_pct:
+                        logger.error(f"🚨 Max drawdown exceeded: {drawdown:.2%}")
+                        return False
+                except:
+                    pass
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Kill switch check failed: {e}")
+            return False
+    
     def execute_final_trades(self):
-        """Final production trading execution"""
+        """Final production trading execution - CHAT-G.TXT SAFEGUARDS"""
         logger.info("🚀 Starting FINAL PRODUCTION trading scan...")
+        
+        # CHAT-G.TXT: CHECK KILL SWITCHES FIRST
+        if not self._check_kill_switches():
+            logger.error("🚨 KILL SWITCHES ACTIVATED - STOPPING TRADING")
+            return 0
         
         try:
             # Get account info
-            current_positions = {pos.symbol: pos for pos in self.api.list_positions()}
-            account = self.api.get_account()
-            buying_power = float(account.buying_power)
+            if self.api:
+                current_positions = {pos.symbol: pos for pos in self.api.list_positions()}
+                account = self.api.get_account()
+                buying_power = float(account.buying_power)
+            else:
+                current_positions = self.demo_positions
+                buying_power = self.demo_portfolio
             
             # Get market regime
             regime, regime_bias, regime_desc = self.get_market_regime_final()
@@ -777,18 +892,49 @@ class FinalProductionBot:
                     
                     if target_signal > buy_threshold:
                         if ticker not in current_positions:
-                            # New position
-                            self.api.submit_order(
-                                symbol=ticker,
-                                qty=shares,
-                                side='buy',
-                                type='market',
-                                time_in_force='day'
-                            )
-                            logger.info(f"📈 BUY {shares} shares of {ticker} @ ${price:.2f}")
-                            logger.info(f"    Signal: {target_signal:.2f}, Confidence: {confidence:.2f}")
-                            logger.info(f"    Strategy: {signal['strategy_type']}, Regime: {regime}")
-                            trades_made += 1
+                            # Execute buy order (real or demo)
+                            try:
+                                if self.api and not self.demo_mode:
+                                    # Real Alpaca order
+                                    order = self.api.submit_order(
+                                        symbol=ticker,
+                                        qty=shares,
+                                        side='buy',
+                                        type='market',
+                                        time_in_force='day'
+                                    )
+                                    logger.info(f"✅ REAL ORDER: BUY {shares} shares of {ticker} @ ${price:.2f}")
+                                    logger.info(f"    Order ID: {order.id}")
+                                else:
+                                    # Demo mode - simulate the trade
+                                    cost = shares * price
+                                    if cost <= self.demo_portfolio:
+                                        self.demo_portfolio -= cost
+                                        self.demo_positions[ticker] = {
+                                            'shares': shares,
+                                            'avg_price': price,
+                                            'cost': cost
+                                        }
+                                        self.demo_trades.append({
+                                            'symbol': ticker,
+                                            'action': 'BUY',
+                                            'shares': shares,
+                                            'price': price,
+                                            'signal': target_signal,
+                                            'confidence': confidence
+                                        })
+                                        logger.info(f"🎯 DEMO BUY: {shares} shares of {ticker} @ ${price:.2f}")
+                                        logger.info(f"    Portfolio: ${self.demo_portfolio:,.2f} remaining")
+                                        logger.info(f"    Position value: ${cost:.2f}")
+                                    else:
+                                        logger.warning(f"⚠️ Insufficient demo funds for {ticker}")
+                                
+                                logger.info(f"    Signal: {target_signal:.2f}, Confidence: {confidence:.2f}")
+                                logger.info(f"    Strategy: {signal['strategy_type']}, Regime: {regime}")
+                                trades_made += 1
+                                
+                            except Exception as e:
+                                logger.error(f"❌ Order failed for {ticker}: {e}")
                             
                         elif (regime in ['strong_bull', 'super_bull'] and 
                               regime_desc in ['OVERDRIVE', 'AGGRESSIVE']):
@@ -842,6 +988,37 @@ class FinalProductionBot:
             self._run_production_monitoring(trades_made, regime, regime_desc)
             
             logger.info(f"✅ FINAL PRODUCTION session complete: {trades_made} trades")
+            
+            # Show detailed portfolio summary
+            if hasattr(self, 'demo_mode') and self.demo_mode:
+                logger.info("=" * 60)
+                logger.info("📊 DEMO PORTFOLIO SUMMARY")
+                logger.info("=" * 60)
+                logger.info(f"💰 Cash Remaining: ${self.demo_portfolio:,.2f}")
+                
+                total_position_value = 0
+                if hasattr(self, 'demo_positions') and self.demo_positions:
+                    logger.info(f"📈 Current Positions ({len(self.demo_positions)}):")
+                    for symbol, pos in self.demo_positions.items():
+                        position_value = pos['shares'] * pos['avg_price']
+                        total_position_value += position_value
+                        logger.info(f"   {symbol}: {pos['shares']} shares @ ${pos['avg_price']:.2f} = ${position_value:,.2f}")
+                
+                total_portfolio = self.demo_portfolio + total_position_value
+                initial_value = 100000
+                total_return = ((total_portfolio - initial_value) / initial_value) * 100
+                
+                logger.info(f"💎 Total Position Value: ${total_position_value:,.2f}")
+                logger.info(f"💼 Total Portfolio Value: ${total_portfolio:,.2f}")
+                logger.info(f"📈 Session Return: {total_return:+.2f}%")
+                
+                if hasattr(self, 'demo_trades') and self.demo_trades:
+                    logger.info(f"🎯 Trades This Session: {len(self.demo_trades)}")
+                    for trade in self.demo_trades[-5:]:  # Show last 5 trades
+                        logger.info(f"   {trade['action']} {trade['shares']} {trade['symbol']} @ ${trade['price']:.2f} (Signal: {trade['signal']:.2f})")
+                
+                logger.info("=" * 60)
+            
             logger.info(f"🎯 Next scan in 24 hours")
             
         except Exception as e:

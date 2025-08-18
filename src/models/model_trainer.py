@@ -822,15 +822,22 @@ class ModelTrainer:
             holdout_features = meta_data.loc[holdout_mask, oof_ts.columns.tolist() + list(meta_features.columns)]
             holdout_targets = meta_data.loc[holdout_mask, 'target']
 
-            # Encode targets {-1,0,1} -> {0,1,2}
-            train_targets_enc = np.clip(train_targets.values, -1, 1).astype(int) + 1
-            holdout_targets_enc = np.clip(holdout_targets.values, -1, 1).astype(int) + 1
+            # Encode targets {-1,0,1} -> {0,1,2} - CHAT-G.TXT COMPLIANT
+            train_targets_enc = (np.clip(train_targets.values, -1, 1).astype(int) + 1)
+            holdout_targets_enc = (np.clip(holdout_targets.values, -1, 1).astype(int) + 1)
+            
+            # Validate target encoding
+            assert set(np.unique(train_targets_enc)) <= {0, 1, 2}, "Invalid target encoding"
+            logger.info(f"📊 Meta-train: {len(train_features)} samples, Holdout: {len(holdout_features)} samples")
 
-            # Calculate sample weights for class imbalance
+            # Calculate sample weights for class imbalance - CHAT-G.TXT: Handle dead-zone dominance
             class_counts = np.bincount(train_targets_enc, minlength=3)
             total = len(train_targets_enc)
-            class_weights = {i: total / (3 * class_counts[i]) for i in range(3)}
+            class_weights = {i: total / (3 * class_counts[i]) if class_counts[i] > 0 else 1.0 for i in range(3)}
             sample_weights = np.array([class_weights[i] for i in train_targets_enc])
+            
+            logger.info(f"📊 Class distribution: {dict(zip([0,1,2], class_counts))}")
+            logger.info(f"📊 Class weights: {class_weights}")
 
             lgb_train = lgb.Dataset(train_features, label=train_targets_enc, weight=sample_weights)
 

@@ -1,125 +1,135 @@
-❗ Still broken / inconsistent (fix these next)
+Awesome structure 👏 — this is very close to “production-ready.” Before we call it done, here’s a tight audit + action list to make it robust, leak-free, and safer in live trading. No code below, just what to change/add.
 
-Meta-model uses fake zeros (no OOF stacking)
+🔥 Critical fixes (do these first)
 
-In _train_meta_model(), you still fill fold_preds = np.zeros(...).
+True stacking (OOF) for the meta-model
 
-Fix: For each base model and CV fold, store the out-of-fold predictions aligned to the original X indices for that fold’s test set. After CV finishes, you must have a full OOF column per model (e.g., ts_patchtst, ts_itransformer, ts_gru). Train LightGBM on these OOF columns + meta_features for exactly the same rows.
+Build out-of-fold predictions for each base model (GRU / PatchTST / iTransformer) and train LightGBM only on OOF + meta features.
 
-Scaling mismatch at inference inside CV
+Remove any placeholder zeros. Save oof_predictions.parquet and verify no NaNs.
 
-You scale data inside _train_single_model(), but when you later call _predict_model(trained_model, X_test_seq) you pass the unscaled X_test_seq (the scaling was local to the training function).
+Report global OOF IC & Precision@K per model and for the ensemble.
 
-Fix: Move scaling outside _train_single_model() at the fold level (fit scaler on train, transform both train & test before creating the DataLoaders and before computing predictions). Also persist the scaler per fold (you’ll need it later for backtests/live).
+Consistent scaling
 
-Embargo logic doesn’t actually change the train set
+Fit scaler per fold on train, apply to that fold’s test; persist each scaler with the fold’s model.
 
-Because you cap train by train_end_date = test_start_date − purge_days, excluding the post-test embargo window from the train mask is redundant (those dates are after train_end_date anyway).
+Ensure backtester and live inference load and apply the same scaler before sequencing.
 
-Fix: Keep purge (pre-test) as you do. You can remove the post-test embargo from the train mask or, if you want textbook LdP behavior, apply embargo symmetrically around the test period when building adjacent folds.
+Calibration without leakage
 
-Meta-model calibration leakage
+Split the OOF table by date into meta-train (≈80%) and OOF-holdout (≈20%).
 
-You calibrate on the same OOF table you trained the meta-model on. Isotonic CV helps, but it’s still optimistic.
+Train LightGBM on meta-train; fit isotonic calibration on the holdout only.
 
-Fix: Split the OOF table by date into meta-train (e.g., 80%) and a small OOF-holdout (20%). Train LightGBM on meta-train; run CalibratedClassifierCV on the holdout only. Save both.
+Save both the raw LGBM model and the calibrated wrapper separately.
 
-Saving the meta-model is incorrect
+Save the right artifacts
 
-torch.save(self.meta_model) won’t work for a LightGBM object.
+PyTorch models: *.pt (per fold) + JSON metadata (seq_len, features, scaler path).
 
-Fix:
+LightGBM: meta_model.txt; calibration: calibrated_meta.pkl.
 
-Save LGBM via meta_model.save_model(".../meta_model.txt") (or pickle with joblib).
+Thresholds by regime: regime_thresholds.json.
 
-Save the calibrated wrapper separately with joblib.dump.
+OOF table: oof_predictions.parquet.
 
-Keep TS PyTorch models with torch.save as you do.
+Purged CV details
 
-No class imbalance handling for meta-labels
+You already purge before the test. Either drop the “post-test embargo” from train (it’s redundant with your train_end date), or implement symmetric embargo strictly around each test window.
 
-Dead-zone often dominates (lots of zeros).
+Log: fold train range, purge days, test range, embargo days.
 
-Fix: Pass class_weight/is_unbalance=True (or custom weights) to LightGBM, or downsample the 0-class for the meta-model. This usually boosts Precision@K.
+Class imbalance in meta-labels
 
-No seeds → non-reproducible results
+Dead-zone usually dominates. In LightGBM set is_unbalance=True or custom class weights, or downsample class 0 for the meta-model.
 
-Fix: Set seeds for numpy, torch (and cudnn.deterministic=True, benchmark=False). Log them.
+Determinism
 
-Metrics don’t use OOF for base models
+Set seeds for NumPy, PyTorch (and cuDNN deterministic), LightGBM. Log the seed and environment (Python & package versions).
 
-You report fold metrics, but you don’t compute a global OOF IC/Precision@K per base model.
+Backtester parity
 
-Fix: Once you build OOF predictions, compute and log overall OOF metrics per model; these are the only honest numbers to compare with the meta-model.
+Backtester must use calibrated probabilities + saved regime thresholds + the same scalers and feature list. Verify fee/slippage/short-borrow are applied on every trade and side.
 
-➕ Additions for production quality
+📈 Modeling & data improvements (quick wins)
 
-Persist per-fold artifacts
+Regime-conditioned thresholds: Learn (buy_prob, sell_prob) per regime on the OOF-holdout to maximize net PnL (fees+slippage included). Save to regime_thresholds.json.
 
-Save for each base model & fold: state_dict, scaler, feature list, seq length, and the list of test indices used in that fold (for auditability).
+Uncertainty → sizing: Use conformal intervals or prediction dispersion to modulate position size (cap size when uncertainty high).
 
-Save the OOF prediction frame you built (Parquet) — invaluable for debugging & re-training meta-models fast.
+Leakage guards: In data_builder, assert no future fields (e.g., forward returns, post-close news) leak into features at t.
 
-Meta-model thresholds by regime
+Survivorship bias: If nasdaq100_tickers.txt is current constituents only, add historical constituents or filter by listing date to avoid bias.
 
-Your thresholds are static.
+Corporate actions: Ensure prices are adjusted for splits/dividends; benchmark QQQ with total return, not price only.
 
-Improve: Learn thresholds on the OOF-holdout conditioned on regime features (e.g., VIX or your regime flags). Grid over (buy_prob, sell_prob) to maximize expected net return (include fees/slippage).
+News/sentiment timestamps: Make sure all news/sentiment features are timestamped pre-market close (or use next-day trade timing).
 
-Stricter NaN/Inf guards
+🛡️ Live-trading safeguards
 
-Add a single helper that asserts np.isfinite on every feature block before sequencing; log the column names with violations.
+Order idempotency: Keep a per-symbol trade ledger (SQLite) so retries don’t duplicate orders.
 
-Training-time early diagnostics
+Kill switch: Stop trading if (a) data stale, (b) drawdown > X%, (c) model confidence collapses, (d) too many API errors.
 
-Log per-epoch distribution stats of predictions (mean, std, % clipped) — spikes or collapse show up immediately.
+Risk budgets: Enforce max gross, max per-name, sector caps, and a daily VaR/vol budget. Cut sizes when VIX spikes.
 
-Backtester integration
+Market hours & holidays: Check exchange calendar; avoid orders at open/close if slippage is high (or widen thresholds).
 
-Ensure your backtester reads calibrated probabilities and applies the regime-specific thresholds you saved.
+Borrow ability for shorts (paper ≠ live): add a “can short?” check or penalize expected PnL if borrow uncertain.
 
-Use the same scaler used at training time for any live/OOF inference. Mismatched scaling will quietly destroy performance.
+🔍 Validation checklist (run these before live scale-up)
 
-🧭 Minimal, step-by-step changes (in place)
+Data health
 
-Before CV loop
+No NaNs/Infs in feature matrix after joins; no duplicate rows; consistent per-ticker dates.
 
-Create a dict oof_preds = {model_name: pd.Series(index=X.index, dtype=float) for model in models}.
+Confirm Date is timezone-aware or consistently naive everywhere.
 
-Inside CV fold (for each model)
+OOF integrity
 
-Fit scaler on X_train features (not including Date/Ticker).
+Each ts_* OOF column covers the full dataset except the initial seq_len per ticker.
 
-Transform both X_train and X_test before sequence creation.
+Global OOF metrics printed and saved (IC, Precision@K, ROC-AUC on ±1 vs 0).
 
-Train the model.
+Calibration quality
 
-Predict on the scaled X_test sequences.
+Reliability plots on the OOF-holdout (bucketed prob vs realized).
 
-Write those predictions into oof_preds[model_name].loc[test_index] = preds.
+Expected value at trade threshold is > costs across regimes.
 
-After CV completes
+Backtest honesty
 
-Concatenate OOF columns into a DataFrame oof_ts = pd.concat([oof_preds[m].rename(f"ts_{m}") for m in models], axis=1).
+Trades executed at next open/close exactly as configured; no look-ahead.
 
-Join oof_ts with meta_features on index; drop rows with any NA in OOF.
+Fees/slippage applied; short borrow cost applied to shorts.
 
-Train LightGBM on this joined OOF table; calibrate on the holdout split.
+Report: alpha vs QQQ total return, Sharpe, Sortino, turnover, max DD, exposure.
 
-Save: per-fold scalers, model weights, oof_ts.parquet, meta_features_used.json, meta_model.txt, calibrated_model.pkl, regime_thresholds.json.
+Reproducibility
 
-Replace meta-model zeros
+Re-run training with same seed → same OOF metrics (within noise).
 
-Remove the placeholder zeros path entirely; the meta-model should only see real OOF predictions.
+Re-run backtest on saved artifacts → identical results.
 
-📊 What to expect after fixes
+🧪 Rollout plan (low risk)
 
-Higher and stable OOF IC for base models (because predictions and scaling are consistent).
+Canary: Paper trade for 2–4 weeks with tiny allocations; compare live fills vs simulated.
 
-Meta-model > best single model on OOF Precision@K (often a few bps of IC gain).
+Shadow mode: Generate signals without execution; verify slippage estimates.
 
-Fewer NaN warnings and better generalization (proper scaling + guardrails).
+Gradual scale-up: Increase max gross and per-name limits stepwise only if realized metrics match backtest ± tolerance.
 
-Reproducible experiments (seeds + saved OOF tables).
+Monitoring: Real-time dashboard for exposure, PnL, drawdown, turnover, hit rate, and error budget (API/data).
 
-✅ Quick validation checklist
+📦 Project hygiene
+
+Lock dependencies (requirements.txt pinned), export environment file, and record in artifacts/models/best/*_meta.json.
+
+Version artifacts by run timestamp; never overwrite best models without archiving the old ones.
+
+Secrets in .env only; never in code or logs.
+
+🏁 Bottom line
+
+You’re ~90% there. The must-fix items are: proper OOF stacking, consistent scaling + persistence, leakage-free calibration, artifact saving, and backtester parity. Once those are in, the ensemble will be both honest (OOF-proven) and deployable (reproducible, safe).

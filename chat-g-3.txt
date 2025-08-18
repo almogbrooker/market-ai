@@ -1,0 +1,89 @@
+✅ What’s strong
+
+Solid ensemble (PatchTST + iTransformer + meta-model) with multi-modal data.
+
+Risk layer is thoughtful (trailing stops, profit lock, regime toggles).
+
+Purged CV + OOF stacking is mentioned (keep it—this is your credibility).
+
+🚨 Fix/clarify before you boast results
+
+Trading thresholds conflict
+
+You say: Long if prob_up > 52%, short if < 48%, and 95%+ confidence to trade.
+Those don’t align: if “confidence” is calibrated probability, you’ll almost never hit 95%.
+
+Fix: Define one actionable rule set, e.g.
+
+Trade if calibrated P(up) ≥ buy_thr_regime or ≤ sell_thr_regime.
+
+Size = f( (P − 0.5), uncertainty, volatility ).
+
+Remove/rename the “95% confidence” line or make it a separate quality gate (e.g., conformal risk score).
+
+Performance claims must be reproducible
+
+“100% win rate (5/5 trades)” is anecdotal; “+78.97% over 3.6y” must include fees, slippage, borrow costs, and survivorship handling.
+
+Fix: Publish a single reproducible backtest report that uses:
+
+OOF ensemble only (no in-fold leakage).
+
+Walk-forward (train ≤T, test (T, T+Δ], roll).
+
+Next bar execution (your chosen “trade_at”: next open/close) with bps costs set per side & regime.
+
+QQQ total-return benchmark (dividends).
+
+Historical constituents or IPO filters to avoid survivorship bias.
+
+OOF stacking must be real
+
+Meta-model should train only on out-of-fold base predictions, not placeholders.
+
+Deliverables: oof_predictions.parquet, per-model OOF IC/Precision@K, and calibration reliability plot (OOF-holdout).
+
+Calibration without leakage
+
+Fit isotonic/Platt only on an OOF-holdout slice by date, not the same data used to fit LGBM.
+
+Timestamp discipline for news & fundamentals
+
+GDELT/Reddit/StockTwits/EDGAR features must be available before the trade time.
+
+Guardrails: lag all non-price features to T+1 close (or restrict to posts before 15:50 ET if trading at close). Log a “feature latency” audit.
+
+Survivorship & corporate actions
+
+Use adjusted prices; confirm symbol life cycles. If using “NASDAQ-100”, either backfill historical members or restrict to each name’s listed period.
+
+Risk metrics parity
+
+Report net performance with: annualized return, volatility, Sharpe/Sortino, max DD, turnover, long/short exposure, sector exposures, and hit rate per regime.
+
+📈 Modeling upgrades (high ROI)
+
+Regime-conditioned thresholds
+Learn (buy_thr, sell_thr) per regime to maximize expected PnL after costs. Persist in regime_thresholds.json.
+
+Uncertainty-aware sizing
+Add conformal prediction or ensemble dispersion; lower size when uncertainty high or VIX elevated.
+
+Class imbalance in meta-labels
+Dead-zone >> up/down. Use class weights or downsample class 0 in LightGBM.
+
+Champion–Challenger
+Keep current ensemble as Champion; run a challenger that adds a linear baseline (Ridge/ElasticNet on cross-sectional features) and a tree model (LightGBM direct). Promote only if OOS Sharpe improves with equal/less drawdown.
+
+Feature governance
+Save feature list + scalers per fold; add SHAP top-20 for interpretability (meta-model level).
+
+🛡️ Live trading hardening
+
+Idempotent orders (SQLite ledger), duplicate-order guard, market-hours & holiday calendar checks.
+
+Borrow checks for shorts; model penalty if borrow unavailable/expensive.
+
+Kill-switches: data stale, error burst, DD breach, VIX circuit.
+
+Risk budgets: max gross, per-name, sector caps; dynamic de-risk on VIX spikes.
