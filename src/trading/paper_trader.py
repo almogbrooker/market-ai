@@ -57,6 +57,10 @@ class PaperTrader:
         # Risk management
         self.daily_loss_limit = 0.05  # 5% daily loss limit
         self.position_timeout = 20  # Days to hold position
+
+        # Load calibrated regime thresholds
+        self.regime_thresholds = self._load_regime_thresholds()
+        self.quality_gate = self.regime_thresholds.get('quality_gate', 0.95)
         
         logger.info(f"📈 PaperTrader initialized: {max_gross:.1%} max gross, {max_per_name:.1%} per name")
     
@@ -85,7 +89,23 @@ class PaperTrader:
             logger.error(f"❌ Failed to connect to Alpaca: {e}")
             logger.info("Running in simulation mode")
             self.api = None
-    
+
+    def _load_regime_thresholds(self) -> Dict[str, float]:
+        """Load regime thresholds from the model directory."""
+
+        path = self.model_dir / "regime_thresholds.json"
+        if path.exists():
+            try:
+                with open(path, "r") as f:
+                    thresholds = json.load(f)
+                logger.info(f"📥 Loaded regime thresholds from {path}")
+                return thresholds
+            except Exception as e:
+                logger.warning(f"Could not load regime thresholds: {e}")
+        else:
+            logger.warning("regime_thresholds.json not found; using default thresholds")
+        return {}
+
     def start_trading(self):
         """Start the paper trading loop"""
         
@@ -249,24 +269,33 @@ class PaperTrader:
             {
                 'symbol': 'AAPL',
                 'side': 'buy',
-                'confidence': 0.75,
+                'prob': 0.76,
+                'prob_diff': 0.52,
+                'quality': 0.97,
                 'expected_return': 0.02,
                 'current_price': self._get_current_price('AAPL')
             },
             {
-                'symbol': 'MSFT', 
+                'symbol': 'MSFT',
                 'side': 'sell',
-                'confidence': 0.68,
+                'prob': 0.70,
+                'prob_diff': 0.40,
+                'quality': 0.96,
                 'expected_return': -0.015,
                 'current_price': self._get_current_price('MSFT')
             }
         ]
-        
-        # Filter signals by confidence threshold
-        high_confidence_signals = [s for s in mock_signals if s['confidence'] >= 0.65]
-        
-        logger.info(f"🎯 Generated {len(high_confidence_signals)} trading signals")
-        return high_confidence_signals
+
+        # Apply regime thresholds and quality gate
+        filtered_signals = []
+        for s in mock_signals:
+            thr_key = f"{s['side']}_prob"
+            threshold = self.regime_thresholds.get(thr_key, 0.5)
+            if s['prob'] >= threshold and s.get('quality', 1.0) >= self.quality_gate:
+                filtered_signals.append(s)
+
+        logger.info(f"🎯 Generated {len(filtered_signals)} trading signals")
+        return filtered_signals
     
     def _should_generate_signals(self) -> bool:
         """Check if we should generate new signals (not too frequently)"""
@@ -294,15 +323,15 @@ class PaperTrader:
             try:
                 symbol = signal['symbol']
                 side = signal['side']
-                confidence = signal['confidence']
+                prob_diff = signal['prob_diff']
                 current_price = signal['current_price']
-                
+
                 if not current_price:
                     logger.warning(f"No price available for {symbol}")
                     continue
-                
+
                 # Calculate position size
-                position_size = self._calculate_position_size(symbol, confidence, current_price)
+                position_size = self._calculate_position_size(symbol, prob_diff, current_price)
                 
                 if position_size == 0:
                     logger.info(f"Skipping {symbol}: position size too small")
@@ -324,17 +353,17 @@ class PaperTrader:
             except Exception as e:
                 logger.error(f"Error executing trade for {signal['symbol']}: {e}")
     
-    def _calculate_position_size(self, symbol: str, confidence: float, price: float) -> int:
+    def _calculate_position_size(self, symbol: str, prob_diff: float, price: float) -> int:
         """Calculate appropriate position size"""
-        
+
         # Base position size as percentage of portfolio
         base_position_pct = 0.02  # 2% of portfolio per position
-        
-        # Adjust by confidence
-        confidence_adjusted_pct = base_position_pct * confidence
-        
+
+        # Adjust by calibrated probability difference
+        prob_adjusted_pct = base_position_pct * prob_diff
+
         # Calculate dollar amount
-        position_value = self.portfolio_value * confidence_adjusted_pct
+        position_value = self.portfolio_value * prob_adjusted_pct
         
         # Convert to shares (must be whole number)
         shares = int(position_value / price)
