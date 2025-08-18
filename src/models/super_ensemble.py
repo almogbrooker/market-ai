@@ -16,6 +16,10 @@ from dataclasses import dataclass
 import warnings
 warnings.filterwarnings('ignore')
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from .advanced_models import create_advanced_model
 
 @dataclass
@@ -111,7 +115,7 @@ class SuperEnsemble(nn.Module):
         
     def load_models(self):
         """Load all trained models"""
-        print("🤖 Loading Super Ensemble Models...")
+        logger.info("🤖 Loading Super Ensemble Models...")
         
         for model_name, config in self.models_config.items():
             try:
@@ -139,15 +143,15 @@ class SuperEnsemble(nn.Module):
                     
                     model.eval()
                     self.models[model_name] = model
-                    print(f"  ✓ {model_name}: Acc={self.model_info[model_name].val_accuracy:.4f}")
-                    
+                    logger.info(f"  ✓ {model_name}: Acc={self.model_info[model_name].val_accuracy:.4f}")
+
                 else:
-                    print(f"  ❌ Checkpoint not found: {config['checkpoint']}")
+                    logger.warning(f"  ❌ Checkpoint not found: {config['checkpoint']}")
                     
             except Exception as e:
-                print(f"  ❌ Failed to load {model_name}: {e}")
-                
-        print(f"📊 Successfully loaded {len(self.models)}/6 models")
+                logger.error(f"  ❌ Failed to load {model_name}: {e}")
+
+        logger.info(f"📊 Successfully loaded {len(self.models)}/6 models")
         
     def calculate_weights(self):
         """Calculate performance-based weights for each model"""
@@ -158,8 +162,14 @@ class SuperEnsemble(nn.Module):
         accuracies = [info.val_accuracy for info in self.model_info.values()]
         losses = [info.val_loss for info in self.model_info.values()]
         
-        # Normalize accuracies to weights
-        acc_weights = np.array(accuracies) / np.sum(accuracies)
+        # Normalize accuracies to weights with zero-sum check
+        acc_array = np.array(accuracies, dtype=float)
+        acc_sum = np.sum(acc_array)
+        if acc_sum == 0:
+            logger.warning("Accuracy sum is zero; using uniform weights.")
+            acc_weights = np.ones_like(acc_array) / len(acc_array)
+        else:
+            acc_weights = acc_array / acc_sum
         
         # Inverse loss weights (lower loss = higher weight)
         loss_weights = 1.0 / np.array(losses)
@@ -172,10 +182,10 @@ class SuperEnsemble(nn.Module):
         for i, (name, info) in enumerate(self.model_info.items()):
             info.weight = combined_weights[i]
             
-        print("\n📈 Model Weights (Performance-based):")
+        logger.info("📈 Model Weights (Performance-based):")
         sorted_models = sorted(self.model_info.items(), key=lambda x: x[1].weight, reverse=True)
         for name, info in sorted_models:
-            print(f"  {name}: {info.weight:.4f} (Acc: {info.val_accuracy:.4f})")
+            logger.info(f"  {name}: {info.weight:.4f} (Acc: {info.val_accuracy:.4f})")
     
     def get_single_prediction(self, model_name: str, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Get prediction and confidence from a single model"""
@@ -324,8 +334,8 @@ class SuperEnsemble(nn.Module):
 
 def test_super_ensemble():
     """Test the super ensemble system"""
-    print("🚀 Testing Super Ensemble System")
-    print("="*50)
+    logger.info("🚀 Testing Super Ensemble System")
+    logger.info("=" * 50)
     
     # Create ensemble
     ensemble = SuperEnsemble()
@@ -337,37 +347,37 @@ def test_super_ensemble():
     # Get predictions with analysis
     results = ensemble.predict_with_analysis(test_data)
     
-    print("\n📊 Super Ensemble Results:")
-    print("-" * 30)
+    logger.info("📊 Super Ensemble Results:")
+    logger.info("-" * 30)
     
     # Show ensemble predictions
     preds = results['predictions']
     conf = results['confidence']
     
-    print(f"Super Ensemble Prediction: {preds['super_ensemble'][:3].flatten()}")
-    print(f"Meta-learner Prediction:   {preds['meta_learner'][:3].flatten()}")
-    print(f"Weighted Average:          {preds['weighted_average'][:3].flatten()}")
-    print(f"Ensemble Confidence:       {conf[:3].flatten()}")
+    logger.info(f"Super Ensemble Prediction: {preds['super_ensemble'][:3].flatten()}")
+    logger.info(f"Meta-learner Prediction:   {preds['meta_learner'][:3].flatten()}")
+    logger.info(f"Weighted Average:          {preds['weighted_average'][:3].flatten()}")
+    logger.info(f"Ensemble Confidence:       {conf[:3].flatten()}")
     
     # Show individual model predictions
-    print(f"\n🤖 Individual Model Predictions (first sample):")
+    logger.info("🤖 Individual Model Predictions (first sample):")
     individual = preds['individual_predictions'][0, 0].cpu().numpy()
     for i, name in enumerate(preds['model_names']):
-        print(f"  {name}: {individual[i]:.6f}")
+        logger.info(f"  {name}: {individual[i]:.6f}")
     
     # Show directional predictions
-    print(f"\n📈 Directional Analysis:")
+    logger.info("📈 Directional Analysis:")
     directions = results['directions']
     for method, bullish_pct in directions.items():
-        print(f"  {method}: {bullish_pct:.1%} bullish")
+        logger.info(f"  {method}: {bullish_pct:.1%} bullish")
     
     # Show statistics
     stats = results['statistics']
-    print(f"\n📊 Prediction Statistics (first 3 samples):")
-    print(f"  Mean: {stats['mean'][:3]}")
-    print(f"  Std:  {stats['std'][:3]}")
+    logger.info("📊 Prediction Statistics (first 3 samples):")
+    logger.info(f"  Mean: {stats['mean'][:3]}")
+    logger.info(f"  Std:  {stats['std'][:3]}")
     agreement_vals = stats['agreement'][:3].cpu().numpy()
-    print(f"  Agreement: {agreement_vals}")
+    logger.info(f"  Agreement: {agreement_vals}")
     
     return ensemble, results
 
