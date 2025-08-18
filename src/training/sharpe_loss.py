@@ -6,9 +6,7 @@ Risk-adjusted loss functions for portfolio optimization
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 import logging
 
 logger = logging.getLogger(__name__)
