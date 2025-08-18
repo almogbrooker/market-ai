@@ -60,13 +60,15 @@ class AlpacaLiveBot:
         # Trading parameters
         self.max_positions = 10
         self.position_size = 0.1  # 10% per position
-        self.min_confidence = 0.65
-        
+
+        # Load regime thresholds
+        self.regime_thresholds = self._load_regime_thresholds()
+
         # Load trained models
         self.models = {}
         self.scalers = {}
         self.load_trained_models()
-        
+
         # Performance tracking
         self.performance_data = []
         self.trades_history = []
@@ -78,6 +80,49 @@ class AlpacaLiveBot:
             'INTC', 'QCOM', 'AVGO', 'TXN', 'ORCL', 'CRM', 'ADBE', 'NOW',
             'PYPL', 'NFLX', 'CMCSA', 'PEP', 'COST', 'TMUS', 'SBUX', 'AMGN'
         ]
+
+    def _load_regime_thresholds(self):
+        """Load regime-based probability thresholds"""
+        path = Path("artifacts/models/best/regime_thresholds.json")
+        default = {
+            'strong_bull': {'buy': 0.4, 'sell': 0.3, 'quality': 0.5},
+            'bull': {'buy': 0.5, 'sell': 0.4, 'quality': 0.55},
+            'neutral': {'buy': 0.6, 'sell': 0.5, 'quality': 0.6},
+            'bear': {'buy': 0.7, 'sell': 0.4, 'quality': 0.55},
+            'volatile': {'buy': 0.65, 'sell': 0.45, 'quality': 0.6}
+        }
+        if path.exists():
+            try:
+                with open(path, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to load regime thresholds: {e}")
+        else:
+            logger.warning("⚠️ Regime thresholds file not found, using defaults")
+        return default
+
+    def get_market_regime(self):
+        """Simple market regime detection using QQQ and VIX"""
+        try:
+            qqq = yf.download('QQQ', period='60d')
+            vix = yf.download('^VIX', period='60d')
+            if qqq.empty or vix.empty:
+                return 'neutral'
+
+            returns = qqq['Close'].pct_change()
+            sma10 = returns.rolling(10).mean().iloc[-1]
+            sma20 = returns.rolling(20).mean().iloc[-1]
+            momentum = returns.rolling(5).mean().iloc[-1]
+            vix_level = vix['Close'].iloc[-1]
+
+            if (sma10 > 0.001 and sma10 > sma20 and vix_level < 25 and momentum > 0):
+                return 'bull'
+            if (sma10 < -0.001 and sma10 < sma20 and vix_level > 30 and momentum < 0):
+                return 'bear'
+            return 'neutral'
+        except Exception as e:
+            logger.warning(f"⚠️ Regime detection failed: {e}")
+            return 'neutral'
         
     def load_trained_models(self):
         """Load our trained ensemble models"""
@@ -191,7 +236,14 @@ class AlpacaLiveBot:
     def scan_and_trade(self):
         """Main trading logic"""
         logger.info("🔍 Scanning for trading opportunities...")
-        
+
+        regime = self.get_market_regime()
+        thresholds = self.regime_thresholds.get(regime, self.regime_thresholds.get('neutral'))
+        buy_thr = thresholds.get('buy', 0.6)
+        sell_thr = thresholds.get('sell', 0.4)
+        quality_gate = thresholds.get('quality', 0.0)
+        logger.info(f"🌊 Market regime: {regime} | thresholds: {thresholds}")
+
         # Get current positions
         current_positions = {}
         if self.api:
@@ -200,9 +252,9 @@ class AlpacaLiveBot:
                 current_positions = {pos.symbol: float(pos.qty) for pos in positions}
             except:
                 current_positions = {}
-        
+
         signals = []
-        
+
         # Analyze each stock
         for symbol in self.stocks:
             try:
@@ -210,37 +262,45 @@ class AlpacaLiveBot:
                 data = self.get_market_data([symbol], period='60d')
                 if data is None or len(data) < 30:
                     continue
-                
+
                 if len(self.stocks) > 1:
                     data = data[symbol]  # Multi-symbol case
-                
+
                 # Generate features
                 features = self.generate_features(data)
                 if len(features) < 30:
                     continue
-                
+
                 # Make prediction
                 prediction = self.make_predictions(features)
-                
-                # Calculate confidence (mock for now)
-                confidence = min(0.95, abs(prediction) * 2 + 0.5)
-                
-                # Create signal
-                if abs(prediction) > 0.02 and confidence > self.min_confidence:
+
+                # Map prediction to probability (mock)
+                probability = min(0.99, abs(prediction) * 2 + 0.5)
+
+                if probability < quality_gate or abs(prediction) <= 0.02:
+                    continue
+
+                action = None
+                if prediction > 0 and probability >= buy_thr:
+                    action = 'BUY'
+                elif prediction < 0 and probability >= sell_thr:
+                    action = 'SELL'
+
+                if action:
                     signals.append({
                         'symbol': symbol,
                         'prediction': prediction,
-                        'confidence': confidence,
-                        'action': 'BUY' if prediction > 0 else 'SELL',
+                        'probability': probability,
+                        'action': action,
                         'current_price': float(data['Close'].iloc[-1])
                     })
-                    
+
             except Exception as e:
                 logger.warning(f"Error analyzing {symbol}: {e}")
                 continue
-        
-        # Sort by confidence and execute trades
-        signals.sort(key=lambda x: x['confidence'], reverse=True)
+
+        # Sort by probability and execute trades
+        signals.sort(key=lambda x: x['probability'], reverse=True)
         
         trades_made = 0
         for signal in signals[:self.max_positions]:
@@ -294,7 +354,7 @@ class AlpacaLiveBot:
                 )
                 
                 logger.info(f"📈 {action} {shares} shares of {symbol} @ ${signal['current_price']:.2f}")
-                logger.info(f"    Signal: {signal['prediction']:.3f}, Confidence: {signal['confidence']:.2f}")
+                logger.info(f"    Signal: {signal['prediction']:.3f}, Prob: {signal['probability']:.2f}")
                 
                 # Track trade
                 self.trades_history.append({
@@ -304,7 +364,7 @@ class AlpacaLiveBot:
                     'shares': shares,
                     'price': signal['current_price'],
                     'signal': signal['prediction'],
-                    'confidence': signal['confidence']
+                    'probability': signal['probability']
                 })
                 
                 return True
@@ -312,7 +372,7 @@ class AlpacaLiveBot:
             else:
                 # Simulation mode
                 logger.info(f"🎯 [SIM] {action} {symbol} @ ${signal['current_price']:.2f}")
-                logger.info(f"    Signal: {signal['prediction']:.3f}, Confidence: {signal['confidence']:.2f}")
+                logger.info(f"    Signal: {signal['prediction']:.3f}, Prob: {signal['probability']:.2f}")
                 return True
                 
         except Exception as e:
@@ -422,10 +482,15 @@ class AlpacaLiveBot:
             if self.trades_history:
                 df_trades = pd.DataFrame(self.trades_history)
                 
-                fig2 = px.scatter(df_trades, x='timestamp', y='confidence', 
-                                color='action', size='shares',
-                                title="Trading Activity",
-                                color_discrete_map={'BUY': '#27ae60', 'SELL': '#e74c3c'})
+                fig2 = px.scatter(
+                    df_trades,
+                    x='timestamp',
+                    y='probability',
+                    color='action',
+                    size='shares',
+                    title="Trading Activity",
+                    color_discrete_map={'BUY': '#27ae60', 'SELL': '#e74c3c'}
+                )
             else:
                 fig2 = go.Figure()
             
