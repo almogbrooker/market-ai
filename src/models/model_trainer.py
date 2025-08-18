@@ -549,9 +549,10 @@ class ModelTrainer:
                     logger.warning(f"Found {np.sum(np.isnan(predictions))} NaN predictions, replacing with 0")
                     predictions = np.nan_to_num(predictions, nan=0.0)
 
-                # Store OOF predictions with original indices
+                # Store OOF predictions with original indices - flatten predictions if needed
                 test_original_idx = X_test.index[:len(y_test_seq)]
-                oof_predictions[model_name].loc[test_original_idx] = predictions[:len(test_original_idx)]
+                predictions_flat = predictions.flatten() if predictions.ndim > 1 else predictions
+                oof_predictions[model_name].loc[test_original_idx] = predictions_flat[:len(test_original_idx)]
 
                 metrics = self._calculate_metrics(y_test_seq, predictions)
 
@@ -643,6 +644,15 @@ class ModelTrainer:
         
         elif model_name == 'gru':
             return SimpleGRU(
+                input_size=input_size,
+                hidden_size=64,
+                num_layers=2,
+                dropout=0.3
+            ).to(self.device)
+        
+        elif model_name == 'lstm':
+            from models.advanced_models import AdvancedLSTM
+            return AdvancedLSTM(
                 input_size=input_size,
                 hidden_size=64,
                 num_layers=2,
@@ -816,11 +826,13 @@ class ModelTrainer:
             train_targets_enc = np.clip(train_targets.values, -1, 1).astype(int) + 1
             holdout_targets_enc = np.clip(holdout_targets.values, -1, 1).astype(int) + 1
 
+            # Calculate sample weights for class imbalance
             class_counts = np.bincount(train_targets_enc, minlength=3)
             total = len(train_targets_enc)
             class_weights = {i: total / (3 * class_counts[i]) for i in range(3)}
+            sample_weights = np.array([class_weights[i] for i in train_targets_enc])
 
-            lgb_train = lgb.Dataset(train_features, label=train_targets_enc)
+            lgb_train = lgb.Dataset(train_features, label=train_targets_enc, weight=sample_weights)
 
             params = {
                 'objective': 'multiclass',
@@ -832,7 +844,6 @@ class ModelTrainer:
                 'feature_fraction': 0.8,
                 'bagging_fraction': 0.8,
                 'bagging_freq': 5,
-                'class_weight': class_weights,
                 'seed': self.seed,
                 'verbose': -1
             }

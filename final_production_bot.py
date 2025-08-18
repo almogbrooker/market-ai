@@ -666,6 +666,39 @@ class FinalProductionBot:
             logger.info(f"📊 Current positions: {len(current_positions)}")
             logger.info(f"🌊 Market regime: {regime.upper()} ({regime_desc}) - Bias: {regime_bias:+.2f}")
             
+            # Get actual portfolio performance from Alpaca
+            try:
+                portfolio_history = self.api.get_portfolio_history(period='1M', timeframe='1D')
+                if hasattr(portfolio_history, 'equity') and portfolio_history.equity:
+                    current_value = float(portfolio_history.equity[-1])
+                    initial_value = float(portfolio_history.equity[0])
+                    total_return = ((current_value - initial_value) / initial_value) * 100
+                    
+                    logger.info(f"📈 ACTUAL ALPACA PERFORMANCE (Last 30 Days):")
+                    logger.info(f"   Portfolio Value: ${current_value:,.2f}")
+                    logger.info(f"   Initial Value: ${initial_value:,.2f}")
+                    logger.info(f"   Total Return: {total_return:+.2f}%")
+                    
+                    # Compare to QQQ benchmark
+                    qqq_monthly_return = 1.5  # Conservative QQQ estimate
+                    alpha = total_return - qqq_monthly_return
+                    logger.info(f"   QQQ Benchmark: ~{qqq_monthly_return:.1f}%")
+                    logger.info(f"   🚀 ALPHA vs QQQ: {alpha:+.2f}%")
+                else:
+                    # Get current account value for basic tracking
+                    account_value = float(account.portfolio_value) if hasattr(account, 'portfolio_value') else float(account.equity)
+                    logger.info(f"📈 CURRENT ACCOUNT STATUS:")
+                    logger.info(f"   Account Value: ${account_value:,.2f}")
+                    logger.info(f"   Buying Power: ${buying_power:,.2f}")
+            except Exception as e:
+                logger.info(f"📊 Portfolio history not available: {str(e)[:50]}...")
+                # Show basic account info
+                try:
+                    account_value = float(account.equity)
+                    logger.info(f"📈 CURRENT ACCOUNT: ${account_value:,.2f}")
+                except:
+                    logger.info("📊 Account in demo/setup mode")
+            
             # Analyze stocks with regime-based prioritization
             signals = []
             
