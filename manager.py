@@ -23,6 +23,7 @@ from models.model_trainer import ModelTrainer
 from evaluation.backtester import Backtester
 from trading.paper_trader import PaperTrader
 from utils.logger import setup_logging
+from utils.config import ensure_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -202,9 +203,10 @@ def main():
         parser.print_help()
         return
     
-    # Setup logging
+    # Setup logging and ensure required directories exist
     setup_logging()
-    
+    ensure_dirs()
+
     # Initialize manager
     manager = TradingSystemManager()
     
