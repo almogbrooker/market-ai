@@ -12,6 +12,7 @@ import yfinance as yf
 import schedule
 import time
 import os
+import json
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import logging
@@ -65,7 +66,10 @@ class FinalProductionBot:
         # Optimized parameters
         self.max_positions = 20
         self.position_size = 0.05  # 5% per position
-        self.min_confidence = 0.6
+
+        # Load regime-specific probability/quality thresholds
+        with open('regime_thresholds.json', 'r') as f:
+            self.regime_thresholds = json.load(f)
         
         # CHAT-G.TXT: LIVE TRADING SAFEGUARDS
         self.max_drawdown_pct = 0.10  # 10% max drawdown kill switch
@@ -418,32 +422,44 @@ class FinalProductionBot:
             
             # Apply regime bias
             final_signal = base_signal + regime_bias
-            
+
             # Special boost for proven winners
             if ticker in ['ORCL', 'AVGO'] and regime in ['super_bull', 'strong_bull']:
                 final_signal += 0.2  # Boost proven QQQ beaters
             elif ticker in ['ILMN', 'ALGN', 'LULU'] and regime == 'bear':
                 final_signal += 0.15  # Boost bear market winners
-            
-            # Position sizing
-            position = np.clip(final_signal, -1.0, 1.2)
-            
-            # Confidence calculation
-            confidence = min(0.95, abs(position) * 0.6 + 0.4)
-            
-            # Boost confidence for proven stocks in right regime
+
+            # Core scores
+            position = np.clip(final_signal, -1.0, 1.0)
+            probability = np.clip(abs(position) * 0.6 + 0.4, 0, 1.0)
+
             if ((ticker in ['ORCL', 'AVGO'] and regime in ['super_bull', 'strong_bull']) or
                 (ticker in ['ILMN', 'ALGN', 'LULU'] and regime == 'bear')):
-                confidence = min(0.95, confidence + 0.15)
-            
+                probability = np.clip(probability + 0.15, 0, 1.0)
+
+            quality = np.clip(abs(base_signal), 0, 1.0)
+
+            # Determine trade direction based on thresholds
+            thresholds = self.regime_thresholds.get(regime, {})
+            buy_cutoff = thresholds.get('buy', 0.6)
+            sell_cutoff = thresholds.get('sell', 0.4)
+            quality_gate = thresholds.get('quality', 0)
+
+            direction = 0
+            if probability >= buy_cutoff and quality >= quality_gate:
+                direction = 1
+            elif probability <= sell_cutoff and quality >= quality_gate:
+                direction = -1
+
             return {
                 'ticker': ticker,
-                'signal': position,
-                'confidence': confidence,
+                'direction': direction,
+                'probability': probability,
+                'quality': quality,
                 'price': latest['Close'],
                 'regime': regime,
                 'regime_desc': regime_desc,
-                'strategy_type': 'bull' if regime in ['super_bull', 'strong_bull'] else 'bear' if regime == 'bear' else 'neutral'
+                'strategy_type': 'bull' if direction == 1 else 'bear' if direction == -1 else 'neutral'
             }
             
         except Exception as e:
@@ -498,7 +514,7 @@ class FinalProductionBot:
         vol_scalar = min(1.0, target_vol / portfolio_vol_estimate)
         
         for signal in signals:
-            signal['vol_adjusted_signal'] = signal['signal'] * vol_scalar
+            signal['probability'] *= vol_scalar
             signal['vol_target'] = target_vol
         
         logger.info(f"📊 Vol targeting: {target_vol:.1f}% target, scalar: {vol_scalar:.2f}")
@@ -558,12 +574,12 @@ class FinalProductionBot:
             filtered_signals = []
             for signal in signals:
                 # Only allow very strong signals during earnings season
-                if signal['confidence'] > 0.75 and abs(signal['signal']) > 0.5:
+                if signal['probability'] > 0.75 and signal['direction'] != 0:
                     signal['earnings_risk'] = True
                     filtered_signals.append(signal)
                 else:
                     logger.debug(f"❌ Earnings filter: Skipping {signal['ticker']} (earnings season)")
-            
+
             logger.info(f"⚠️ Earnings season: {len(signals)} → {len(filtered_signals)} signals")
             return filtered_signals
         else:
@@ -835,13 +851,13 @@ class FinalProductionBot:
                     time.sleep(1)  # Rate limiting
                 
                 signal = self.analyze_stock_final(ticker)
-                if signal and signal['confidence'] >= self.min_confidence:
+                if signal and signal['direction'] != 0:
                     signals.append(signal)
-            
-            # Sort by signal strength * confidence
-            signals.sort(key=lambda x: x['confidence'] * abs(x['signal']), reverse=True)
-            
-            logger.info(f"🎯 Found {len(signals)} high-confidence signals")
+
+            # Sort by probability and quality
+            signals.sort(key=lambda x: x['probability'] * x['quality'], reverse=True)
+
+            logger.info(f"🎯 Found {len(signals)} tradeable signals")
             
             # PORTFOLIO CONSTRUCTION UPGRADES (chat-g.txt enhancement)
             signals = self._apply_portfolio_filters(signals, current_positions, regime, regime_desc)
@@ -867,107 +883,60 @@ class FinalProductionBot:
             
             for signal in signals[:max_positions_active]:
                 ticker = signal['ticker']
-                target_signal = signal['signal']
+                direction = signal['direction']
                 price = signal['price']
-                confidence = signal['confidence']
-                
-                # Calculate position size (using regime-adjusted sizing)
-                position_value = buying_power * position_size_active * abs(target_signal) * confidence
+                prob = signal['probability']
+                quality = signal['quality']
+
+                position_value = buying_power * position_size_active * prob * quality
                 shares = int(position_value / price)
-                
+
                 if shares < 1:
                     continue
-                
+
                 try:
-                    # Adaptive thresholds based on regime
-                    if regime in ['super_bull', 'strong_bull']:
-                        buy_threshold = 0.2
-                        sell_threshold = -0.25
-                    elif regime == 'bear':
-                        buy_threshold = 0.35
-                        sell_threshold = -0.15
-                    else:
-                        buy_threshold = 0.3
-                        sell_threshold = -0.2
-                    
-                    if target_signal > buy_threshold:
-                        if ticker not in current_positions:
-                            # Execute buy order (real or demo)
-                            try:
-                                if self.api and not self.demo_mode:
-                                    # Real Alpaca order
-                                    order = self.api.submit_order(
-                                        symbol=ticker,
-                                        qty=shares,
-                                        side='buy',
-                                        type='market',
-                                        time_in_force='day'
-                                    )
-                                    logger.info(f"✅ REAL ORDER: BUY {shares} shares of {ticker} @ ${price:.2f}")
-                                    logger.info(f"    Order ID: {order.id}")
-                                else:
-                                    # Demo mode - simulate the trade
-                                    cost = shares * price
-                                    if cost <= self.demo_portfolio:
-                                        self.demo_portfolio -= cost
-                                        self.demo_positions[ticker] = {
-                                            'shares': shares,
-                                            'avg_price': price,
-                                            'cost': cost
-                                        }
-                                        self.demo_trades.append({
-                                            'symbol': ticker,
-                                            'action': 'BUY',
-                                            'shares': shares,
-                                            'price': price,
-                                            'signal': target_signal,
-                                            'confidence': confidence
-                                        })
-                                        logger.info(f"🎯 DEMO BUY: {shares} shares of {ticker} @ ${price:.2f}")
-                                        logger.info(f"    Portfolio: ${self.demo_portfolio:,.2f} remaining")
-                                        logger.info(f"    Position value: ${cost:.2f}")
-                                    else:
-                                        logger.warning(f"⚠️ Insufficient demo funds for {ticker}")
-                                
-                                logger.info(f"    Signal: {target_signal:.2f}, Confidence: {confidence:.2f}")
-                                logger.info(f"    Strategy: {signal['strategy_type']}, Regime: {regime}")
-                                trades_made += 1
-                                
-                            except Exception as e:
-                                logger.error(f"❌ Order failed for {ticker}: {e}")
-                            
-                        elif (regime in ['strong_bull', 'super_bull'] and 
-                              regime_desc in ['OVERDRIVE', 'AGGRESSIVE']):
-                            # PYRAMIDING: Add to existing position in bull overdrive (chat-g.txt)
-                            # Only if price is making higher highs (distance ≥ 1×ATR)
-                            current_qty = int(current_positions[ticker].qty)
-                            avg_cost = float(current_positions[ticker].avg_entry_price)
-                            
-                            # Simple ATR estimation (3% of price as proxy)
-                            atr_estimate = price * 0.03
-                            
-                            # Check if price is at least 1 ATR above average cost (higher high)
-                            if (price > avg_cost + atr_estimate and 
-                                target_signal > buy_threshold + 0.1 and  # Stronger signal required
-                                current_qty < shares * 3):  # Max 3x original position
-                                
-                                pyramid_shares = min(shares // 2, shares)  # Smaller pyramid size
-                                
-                                self.api.submit_order(
-                                    symbol=ticker,
-                                    qty=pyramid_shares,
-                                    side='buy',
-                                    type='market',
-                                    time_in_force='day'
-                                )
-                                logger.info(f"🔺 PYRAMID ADD {pyramid_shares} shares of {ticker} @ ${price:.2f}")
-                                logger.info(f"    Previous avg: ${avg_cost:.2f}, ATR distance: {(price-avg_cost)/atr_estimate:.1f}x")
-                                trades_made += 1
-                    
-                    elif target_signal < sell_threshold:
-                        if ticker in current_positions:
-                            current_qty = int(current_positions[ticker].qty)
-                            if current_qty > 0:
+                    if direction == 1 and ticker not in current_positions:
+                        if self.api and not self.demo_mode:
+                            order = self.api.submit_order(
+                                symbol=ticker,
+                                qty=shares,
+                                side='buy',
+                                type='market',
+                                time_in_force='day'
+                            )
+                            logger.info(f"✅ REAL ORDER: BUY {shares} shares of {ticker} @ ${price:.2f}")
+                            logger.info(f"    Order ID: {order.id}")
+                        else:
+                            cost = shares * price
+                            if cost <= self.demo_portfolio:
+                                self.demo_portfolio -= cost
+                                self.demo_positions[ticker] = {
+                                    'shares': shares,
+                                    'avg_price': price,
+                                    'cost': cost
+                                }
+                                self.demo_trades.append({
+                                    'symbol': ticker,
+                                    'action': 'BUY',
+                                    'shares': shares,
+                                    'price': price,
+                                    'probability': prob,
+                                    'quality': quality
+                                })
+                                logger.info(f"🎯 DEMO BUY: {shares} shares of {ticker} @ ${price:.2f}")
+                                logger.info(f"    Portfolio: ${self.demo_portfolio:,.2f} remaining")
+                                logger.info(f"    Position value: ${cost:.2f}")
+                            else:
+                                logger.warning(f"⚠️ Insufficient demo funds for {ticker}")
+
+                        logger.info(f"    Direction: BUY, Prob: {prob:.2f}, Quality: {quality:.2f}")
+                        logger.info(f"    Strategy: {signal['strategy_type']}, Regime: {regime}")
+                        trades_made += 1
+
+                    elif direction == -1 and ticker in current_positions:
+                        current_qty = int(current_positions[ticker].qty) if self.api else self.demo_positions[ticker]['shares']
+                        if current_qty > 0:
+                            if self.api and not self.demo_mode:
                                 self.api.submit_order(
                                     symbol=ticker,
                                     qty=current_qty,
@@ -975,12 +944,25 @@ class FinalProductionBot:
                                     type='market',
                                     time_in_force='day'
                                 )
-                                logger.info(f"📉 SELL {current_qty} shares of {ticker} @ ${price:.2f}")
-                                trades_made += 1
-                
+                            else:
+                                proceeds = current_qty * price
+                                self.demo_portfolio += proceeds
+                                del self.demo_positions[ticker]
+                                self.demo_trades.append({
+                                    'symbol': ticker,
+                                    'action': 'SELL',
+                                    'shares': current_qty,
+                                    'price': price,
+                                    'probability': prob,
+                                    'quality': quality
+                                })
+                            logger.info(f"📉 SELL {current_qty} shares of {ticker} @ ${price:.2f}")
+                            logger.info(f"    Direction: SELL, Prob: {prob:.2f}, Quality: {quality:.2f}")
+                            trades_made += 1
+
                 except Exception as e:
                     logger.error(f"Trade error for {ticker}: {e}")
-                
+
                 if trades_made >= max_trades:
                     break
             
@@ -1015,7 +997,10 @@ class FinalProductionBot:
                 if hasattr(self, 'demo_trades') and self.demo_trades:
                     logger.info(f"🎯 Trades This Session: {len(self.demo_trades)}")
                     for trade in self.demo_trades[-5:]:  # Show last 5 trades
-                        logger.info(f"   {trade['action']} {trade['shares']} {trade['symbol']} @ ${trade['price']:.2f} (Signal: {trade['signal']:.2f})")
+                        logger.info(
+                            f"   {trade['action']} {trade['shares']} {trade['symbol']} @ ${trade['price']:.2f}"
+                            f" (Prob:{trade['probability']:.2f}, Qual:{trade['quality']:.2f})"
+                        )
                 
                 logger.info("=" * 60)
             
