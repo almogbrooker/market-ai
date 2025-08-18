@@ -52,7 +52,10 @@ class PurgedTimeSeriesSplit:
     
     def split(self, X: pd.DataFrame, y: pd.Series = None, groups: pd.Series = None) -> List[Tuple]:
         """
-        Generate purged and embargoed train/test splits using real calendar dates
+        Generate purged and embargoed train/test splits using real calendar dates.
+
+        This method operates on a copy of ``X`` to avoid mutating the caller's
+        DataFrame.
         
         Args:
             X: Feature matrix with 'Date' column
@@ -62,10 +65,13 @@ class PurgedTimeSeriesSplit:
         Returns:
             List of (train_idx, test_idx) tuples
         """
-        
+
         if 'Date' not in X.columns:
             raise ValueError("X must contain 'Date' column for time-based splits")
-        
+
+        # Work on a copy to prevent side effects on the caller's DataFrame
+        X = X.copy()
+
         # Ensure Date column is datetime
         X['Date'] = pd.to_datetime(X['Date'])
         
