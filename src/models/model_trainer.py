@@ -29,10 +29,7 @@ import joblib
 import warnings
 warnings.filterwarnings('ignore')
 
-# Import existing model architectures
-import sys
-sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.models.advanced_models import PatchTST, iTransformer
+from .advanced_models import PatchTST, iTransformer
 
 logger = logging.getLogger(__name__)
 
