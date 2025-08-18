@@ -12,6 +12,8 @@ Enhanced Model Trainer implementing chat-g.txt requirements:
 import pandas as pd
 import numpy as np
 import logging
+import random
+import json
 from typing import Dict, List, Tuple, Optional
 from pathlib import Path
 import torch
@@ -94,11 +96,10 @@ class PurgedTimeSeriesSplit:
             # Embargo window: test_end_date + 1 to test_end_date + embargo_days
             embargo_start_date = test_end_date + pd.Timedelta(days=1)
             embargo_end_date = test_end_date + pd.Timedelta(days=self.embargo_days)
-            
-            # Build train mask: Date <= train_end_date AND not in embargo window
-            train_mask = (X['Date'] <= train_end_date) & ~(
-                (X['Date'] >= embargo_start_date) & (X['Date'] <= embargo_end_date)
-            )
+
+            # Build train mask: Date <= train_end_date
+            # Post-test embargo is redundant since dates beyond train_end_date are already excluded
+            train_mask = (X['Date'] <= train_end_date)
             
             # Build test mask: Date in [test_start_date, test_end_date]
             test_mask = (X['Date'] >= test_start_date) & (X['Date'] <= test_end_date)
@@ -251,10 +252,22 @@ class ModelTrainer:
         self.trained_models = {}
         self.meta_model = None
         self.calibrated_model = None
-        
+        self.meta_thresholds = None
+
+        # Reproducibility
+        self.seed = 42
+        random.seed(self.seed)
+        np.random.seed(self.seed)
+        torch.manual_seed(self.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(self.seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        logger.info(f"🔒 Seeds set: {self.seed}")
+
         logger.info(f"🧠 Enhanced ModelTrainer: {models} + {meta_model}")
         logger.info(f"📊 Cost-aware: {transaction_cost*10000:.1f}bps, Dead-zone: {dead_zone*10000:.1f}bps")
-    
+
     def _clean_gpu_memory(self):
         """Clean GPU memory before training"""
         if torch.cuda.is_available():
@@ -272,8 +285,16 @@ class ModelTrainer:
             # Check memory
             memory_allocated = torch.cuda.memory_allocated() / 1024**3
             memory_cached = torch.cuda.memory_reserved() / 1024**3
-            
+
             logger.info(f"🧹 GPU memory cleaned: {memory_allocated:.2f}GB allocated, {memory_cached:.2f}GB cached")
+
+    def _assert_finite(self, df: pd.DataFrame, context: str):
+        """Ensure dataframe has only finite values"""
+        numeric = df.select_dtypes(include=[np.number])
+        mask = ~np.isfinite(numeric)
+        if mask.any().any():
+            cols = list(numeric.columns[mask.any()])
+            raise ValueError(f"Non-finite values in {context}: {cols}")
         
     def create_meta_labels(self, returns: np.ndarray) -> np.ndarray:
         """
@@ -390,10 +411,10 @@ class ModelTrainer:
             cv_splitter = TimeSeriesSplit(n_splits=self.folds)
         
         # Train time series models
-        ts_results = self._train_ts_models(X, y, cv_splitter)
-        
+        ts_results, oof_df = self._train_ts_models(X, y, cv_splitter)
+
         # Train meta-model
-        meta_results = self._train_meta_model(X, y, meta_features, cv_splitter, ts_results)
+        meta_results = self._train_meta_model(X, y, meta_features, oof_df, ts_results)
         
         # Combine results
         results = {
@@ -469,89 +490,100 @@ class ModelTrainer:
         
         return X, y, meta_features
     
-    def _train_ts_models(self, X: pd.DataFrame, y: pd.Series, cv_splitter) -> Dict:
+    def _train_ts_models(self, X: pd.DataFrame, y: pd.Series, cv_splitter) -> Tuple[Dict, pd.DataFrame]:
         """Train time series models and collect OOF predictions"""
-        
+
         logger.info("📈 Training time series models...")
-        
+
+        feature_cols = [col for col in X.columns if col not in ['Date', 'Ticker']]
         ts_results = {}
-        # FIXED: Store OOF predictions for meta-model (chat-g-2.txt)
-        oof_predictions = {}
-        
+        oof_predictions = {m: pd.Series(index=X.index, dtype=float) for m in self.models}
+
         for model_name in self.models:
             logger.info(f"🔧 Training {model_name}...")
-            
+
             fold_results = []
             trained_models = []
-            model_oof_preds = {}  # Store OOF predictions for this model
-            
+            fold_scalers = []
+            fold_test_indices = []
+
             for fold, (train_idx, test_idx) in enumerate(cv_splitter.split(X)):
-                
+
                 # Prepare fold data
-                X_train = X.iloc[train_idx]
-                X_test = X.iloc[test_idx]
+                X_train = X.iloc[train_idx].copy()
+                X_test = X.iloc[test_idx].copy()
                 y_train = y.iloc[train_idx]
                 y_test = y.iloc[test_idx]
-                
+
+                # Fit scaler on training data and transform
+                scaler = StandardScaler()
+                scaler.fit(X_train[feature_cols])
+                X_train[feature_cols] = scaler.transform(X_train[feature_cols])
+                X_test[feature_cols] = scaler.transform(X_test[feature_cols])
+                fold_scalers.append(scaler)
+                fold_test_indices.append(list(test_idx))
+
+                # NaN/Inf guards
+                self._assert_finite(X_train[feature_cols], f"{model_name} fold {fold} train")
+                self._assert_finite(X_test[feature_cols], f"{model_name} fold {fold} test")
+
                 # Create sequences for time series models
                 X_train_seq, y_train_seq = self._create_sequences(X_train, y_train)
                 X_test_seq, y_test_seq = self._create_sequences(X_test, y_test)
-                
+
                 if X_train_seq is None or len(X_train_seq) < 100:
                     logger.warning(f"Fold {fold}: Insufficient data for {model_name}")
                     continue
-                
+
                 # Train model
                 model = self._create_model(model_name, X_train_seq.shape[-1])
                 trained_model = self._train_single_model(
                     model, X_train_seq, y_train_seq, X_test_seq, y_test_seq
                 )
-                
+
                 # Evaluate
                 predictions = self._predict_model(trained_model, X_test_seq)
-                
+
                 # Handle NaN predictions
                 if np.any(np.isnan(predictions)):
                     logger.warning(f"Found {np.sum(np.isnan(predictions))} NaN predictions, replacing with 0")
                     predictions = np.nan_to_num(predictions, nan=0.0)
-                
-                # FIXED: Store OOF predictions with original indices
-                test_original_idx = X_test.index[:len(y_test_seq)]  # Map back to original indices
-                for i, idx in enumerate(test_original_idx):
-                    if i < len(predictions):  # Ensure we don't exceed predictions length
-                        model_oof_preds[idx] = predictions[i]
-                
+
+                # Store OOF predictions with original indices
+                test_original_idx = X_test.index[:len(y_test_seq)]
+                oof_predictions[model_name].loc[test_original_idx] = predictions[:len(test_original_idx)]
+
                 metrics = self._calculate_metrics(y_test_seq, predictions)
-                
+
                 fold_results.append(metrics)
                 trained_models.append(trained_model)
-                
+
                 logger.info(f"  Fold {fold}: IC={metrics['ic']:.3f}, MSE={metrics['mse']:.4f}")
-            
+
             # Aggregate results
             if fold_results:
-                avg_metrics = {
-                    'ic': np.mean([r['ic'] for r in fold_results]),
-                    'mse': np.mean([r['mse'] for r in fold_results]),
-                    'mae': np.mean([r['mae'] for r in fold_results]),
-                    'precision_at_k': np.mean([r['precision_at_k'] for r in fold_results])
-                }
-                
+                # Compute OOF metrics
+                model_oof = oof_predictions[model_name].dropna()
+                y_oof = y.loc[model_oof.index]
+                oof_metrics = self._calculate_metrics(y_oof.values, model_oof.values)
+
                 ts_results[model_name] = {
-                    'metrics': avg_metrics,
+                    'metrics': oof_metrics,
                     'fold_results': fold_results,
-                    'models': trained_models
-                }
-                
-                # FIXED: Assign to self.trained_models for save_models()
-                self.trained_models[model_name] = {
                     'models': trained_models,
-                    'metrics': avg_metrics
+                    'scalers': fold_scalers,
+                    'feature_list': feature_cols,
+                    'seq_len': 30,
+                    'test_indices': fold_test_indices
                 }
-                
-                logger.info(f"✅ {model_name}: IC={avg_metrics['ic']:.3f}")
-        
-        return ts_results
+
+                self.trained_models[model_name] = ts_results[model_name]
+
+                logger.info(f"✅ {model_name}: OOF IC={oof_metrics['ic']:.3f}")
+
+        oof_df = pd.concat([oof_predictions[m].rename(f"ts_{m}") for m in self.models], axis=1)
+        self.oof_predictions = oof_df
+        return ts_results, oof_df
     
     def _create_sequences(self, X: pd.DataFrame, y: pd.Series, seq_len: int = 30) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
         """Create sequences for time series models"""
@@ -631,22 +663,6 @@ class ModelTrainer:
         y_train = np.nan_to_num(y_train, nan=0.0, posinf=1.0, neginf=-1.0)
         X_val = np.nan_to_num(X_val, nan=0.0, posinf=1.0, neginf=-1.0)
         y_val = np.nan_to_num(y_val, nan=0.0, posinf=1.0, neginf=-1.0)
-        
-        # Normalize inputs to prevent extreme values
-        from sklearn.preprocessing import StandardScaler
-        scaler = StandardScaler()
-        
-        # Reshape for scaling
-        n_samples, seq_len, n_features = X_train.shape
-        X_train_reshaped = X_train.reshape(-1, n_features)
-        X_train_scaled = scaler.fit_transform(X_train_reshaped)
-        X_train = X_train_scaled.reshape(n_samples, seq_len, n_features)
-        
-        # Scale validation data
-        n_val_samples = X_val.shape[0]
-        X_val_reshaped = X_val.reshape(-1, n_features)
-        X_val_scaled = scaler.transform(X_val_reshaped)
-        X_val = X_val_scaled.reshape(n_val_samples, seq_len, n_features)
         
         # Clip targets to reasonable range
         y_train = np.clip(y_train, -1, 1)
@@ -775,131 +791,106 @@ class ModelTrainer:
             'precision_at_k': precision_at_k
         }
     
-    def _train_meta_model(self, X: pd.DataFrame, y: pd.Series, meta_features: pd.DataFrame, 
-                         cv_splitter, ts_results: Dict) -> Dict:
-        """Train meta-model with probability calibration and expected PnL optimization (chat-g.txt)"""
-        
+    def _train_meta_model(self, X: pd.DataFrame, y: pd.Series, meta_features: pd.DataFrame,
+                         oof_ts: pd.DataFrame, ts_results: Dict) -> Dict:
+        """Train meta-model using OOF predictions and calibrate on holdout"""
+
         logger.info("🎯 Training enhanced meta-model with LightGBM...")
-        
-        if self.meta_model_type == 'lightgbm' and len(ts_results) > 0:
-            # Collect TS model predictions across all folds
-            all_predictions = []
-            all_targets = []
-            all_meta_features = []
-            
-            for fold, (train_idx, test_idx) in enumerate(cv_splitter.split(X)):
-                X_test = X.iloc[test_idx]
-                y_test = y.iloc[test_idx]
-                meta_test = meta_features.iloc[test_idx] if len(meta_features) > 0 else pd.DataFrame(index=test_idx)
-                
-                # Get TS model predictions for this fold
-                ts_predictions = []
-                for model_name in ts_results.keys():
-                    if fold < len(ts_results[model_name]['fold_results']):
-                        # Use actual fold predictions if available
-                        fold_preds = np.zeros(len(test_idx))  # Placeholder - would need actual predictions
-                        ts_predictions.append(fold_preds)
-                
-                if ts_predictions:
-                    # Combine TS predictions with meta features
-                    ts_preds_df = pd.DataFrame(ts_predictions).T
-                    ts_preds_df.columns = [f'ts_{model}' for model in ts_results.keys()]
-                    
-                    combined_features = pd.concat([ts_preds_df, meta_test.reset_index(drop=True)], axis=1)
-                    
-                    all_predictions.append(combined_features)
-                    all_targets.extend(y_test.values)
-                    
-            if all_predictions:
-                # Train LightGBM meta-model
-                train_features = pd.concat(all_predictions, ignore_index=True)
-                train_targets = np.array(all_targets)
-                
-                # FIXED: Proper LightGBM target encoding (chat-g-2.txt)
-                # Ensure targets are in {-1, 0, 1} then convert to {0, 1, 2}
-                train_targets_clipped = np.clip(train_targets, -1, 1).astype(int)
-                train_targets_encoded = train_targets_clipped + 1  # {-1,0,1} -> {0,1,2}
-                
-                # Validate class cardinality
-                unique_classes = np.unique(train_targets_encoded)
-                logger.info(f"📊 LightGBM classes: {unique_classes} (expected: [0, 1, 2])")
-                
-                lgb_train = lgb.Dataset(train_features, label=train_targets_encoded)
-                
-                params = {
-                    'objective': 'multiclass',
-                    'num_class': 3,
-                    'metric': 'multi_logloss',
-                    'boosting_type': 'gbdt',
-                    'num_leaves': 31,
-                    'learning_rate': 0.05,
-                    'feature_fraction': 0.8,
-                    'bagging_fraction': 0.8,
-                    'bagging_freq': 5,
-                    'verbose': -1
-                }
-                
-                meta_model = lgb.train(
-                    params,
-                    lgb_train,
-                    num_boost_round=100,
-                    valid_sets=[lgb_train],
-                    callbacks=[lgb.early_stopping(10), lgb.log_evaluation(0)]
-                )
-                
-                # Probability calibration (chat-g.txt requirement)
-                from sklearn.calibration import CalibratedClassifierCV
-                from sklearn.base import BaseEstimator, ClassifierMixin
-                
-                class LGBWrapper(BaseEstimator, ClassifierMixin):
-                    def __init__(self, model):
-                        self.model = model
-                        self.classes_ = np.array([0, 1, 2])  # Required for classifier
-                    
-                    def fit(self, X, y):
-                        return self
-                    
-                    def predict_proba(self, X):
-                        raw_preds = self.model.predict(X, num_iteration=self.model.best_iteration)
-                        # LightGBM multiclass returns shape (n_samples, n_classes)
-                        return raw_preds
-                    
-                    def predict(self, X):
-                        proba = self.predict_proba(X)
-                        return np.argmax(proba, axis=1)
-                
-                # Apply calibration with fallback
-                try:
-                    lgb_wrapper = LGBWrapper(meta_model)
-                    calibrated_model = CalibratedClassifierCV(lgb_wrapper, method='isotonic', cv=3)
-                    calibrated_model.fit(train_features, train_targets_encoded)
-                    logger.info("✅ LightGBM calibration successful")
-                except Exception as e:
-                    logger.warning(f"Calibration failed: {e}, using uncalibrated model")
-                    calibrated_model = LGBWrapper(meta_model)
-                
-                # Calculate expected PnL thresholds per regime (chat-g.txt)
-                meta_results = {
-                    'type': 'lightgbm_calibrated',
-                    'model': meta_model,
-                    'calibrated_model': calibrated_model,
-                    'feature_names': list(train_features.columns),
-                    'thresholds': self._optimize_thresholds_by_regime(train_features, train_targets),
-                    'metrics': {
-                        'ic': np.mean([ts_results[model]['metrics']['ic'] for model in ts_results.keys()]),
-                        'mse': np.mean([ts_results[model]['metrics']['mse'] for model in ts_results.keys()]),
-                        'precision_at_k': np.mean([ts_results[model]['metrics']['precision_at_k'] for model in ts_results.keys()])
-                    }
-                }
-                
-                logger.info(f"✅ LightGBM Meta-model with calibration trained")
-            else:
-                # Fallback to simple ensemble
-                meta_results = self._simple_ensemble_fallback(ts_results)
+
+        if self.meta_model_type == 'lightgbm' and not oof_ts.empty:
+            meta_data = pd.concat([oof_ts, meta_features], axis=1)
+            meta_data['target'] = y
+            meta_data = meta_data.dropna()
+
+            dates = pd.to_datetime(X.loc[meta_data.index, 'Date'])
+            cutoff = dates.quantile(0.8)
+            train_mask = dates <= cutoff
+            holdout_mask = ~train_mask
+
+            train_features = meta_data.loc[train_mask, oof_ts.columns.tolist() + list(meta_features.columns)]
+            train_targets = meta_data.loc[train_mask, 'target']
+            holdout_features = meta_data.loc[holdout_mask, oof_ts.columns.tolist() + list(meta_features.columns)]
+            holdout_targets = meta_data.loc[holdout_mask, 'target']
+
+            # Encode targets {-1,0,1} -> {0,1,2}
+            train_targets_enc = np.clip(train_targets.values, -1, 1).astype(int) + 1
+            holdout_targets_enc = np.clip(holdout_targets.values, -1, 1).astype(int) + 1
+
+            class_counts = np.bincount(train_targets_enc, minlength=3)
+            total = len(train_targets_enc)
+            class_weights = {i: total / (3 * class_counts[i]) for i in range(3)}
+
+            lgb_train = lgb.Dataset(train_features, label=train_targets_enc)
+
+            params = {
+                'objective': 'multiclass',
+                'num_class': 3,
+                'metric': 'multi_logloss',
+                'boosting_type': 'gbdt',
+                'num_leaves': 31,
+                'learning_rate': 0.05,
+                'feature_fraction': 0.8,
+                'bagging_fraction': 0.8,
+                'bagging_freq': 5,
+                'class_weight': class_weights,
+                'seed': self.seed,
+                'verbose': -1
+            }
+
+            meta_model = lgb.train(
+                params,
+                lgb_train,
+                num_boost_round=100,
+                valid_sets=[lgb_train],
+                callbacks=[lgb.early_stopping(10), lgb.log_evaluation(0)]
+            )
+
+            from sklearn.base import BaseEstimator, ClassifierMixin
+
+            class LGBWrapper(BaseEstimator, ClassifierMixin):
+                def __init__(self, model):
+                    self.model = model
+                    self.classes_ = np.array([0, 1, 2])
+
+                def fit(self, X, y):
+                    return self
+
+                def predict_proba(self, X):
+                    return self.model.predict(X, num_iteration=self.model.best_iteration)
+
+                def predict(self, X):
+                    return np.argmax(self.predict_proba(X), axis=1)
+
+            try:
+                lgb_wrapper = LGBWrapper(meta_model)
+                calibrated_model = CalibratedClassifierCV(lgb_wrapper, method='isotonic', cv='prefit')
+                calibrated_model.fit(holdout_features, holdout_targets_enc)
+                logger.info("✅ LightGBM calibration successful")
+            except Exception as e:
+                logger.warning(f"Calibration failed: {e}, using uncalibrated model")
+                calibrated_model = LGBWrapper(meta_model)
+
+            thresholds = self._optimize_thresholds_by_regime(holdout_features, holdout_targets.values)
+
+            pred_class = np.argmax(calibrated_model.predict_proba(holdout_features), axis=1) - 1
+            metrics = self._calculate_metrics(holdout_targets.values, pred_class)
+
+            meta_results = {
+                'type': 'lightgbm_calibrated',
+                'model': meta_model,
+                'calibrated_model': calibrated_model,
+                'feature_names': list(train_features.columns),
+                'thresholds': thresholds,
+                'metrics': metrics
+            }
+
+            self.meta_model = meta_model
+            self.calibrated_model = calibrated_model
+            self.meta_thresholds = thresholds
+            logger.info("✅ LightGBM Meta-model trained on OOF data")
         else:
-            # Fallback to simple ensemble
             meta_results = self._simple_ensemble_fallback(ts_results)
-        
+
         return meta_results
     
     def _simple_ensemble_fallback(self, ts_results: Dict) -> Dict:
@@ -951,28 +942,49 @@ class ModelTrainer:
         
         model_dir = Path(model_dir)
         model_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Save trained models
+
+        # Save trained models and artifacts
         for model_name, model_info in self.trained_models.items():
             if 'models' in model_info:
                 for i, model in enumerate(model_info['models']):
                     model_path = model_dir / f"{model_name}_fold_{i}.pt"
                     torch.save(model.state_dict(), model_path)
-                    logger.info(f"   Saved: {model_path}")
-        
+                    scaler_path = model_dir / f"{model_name}_fold_{i}_scaler.pkl"
+                    joblib.dump(model_info['scalers'][i], scaler_path)
+                    meta_path = model_dir / f"{model_name}_fold_{i}_meta.json"
+                    with open(meta_path, 'w') as f:
+                        json.dump({
+                            'features': model_info['feature_list'],
+                            'seq_len': model_info['seq_len'],
+                            'test_indices': model_info['test_indices'][i]
+                        }, f)
+                    logger.info(f"   Saved: {model_path}, {scaler_path}")
+
         # Save meta-model
         if self.meta_model:
-            meta_path = model_dir / "meta_model.pt"
-            torch.save(self.meta_model, meta_path)
-            logger.info(f"   Saved: {meta_path}")
-        
-        # Save training results
-        results_path = model_dir / "training_results.pkl"
-        joblib.dump({
-            'ts_models': self.trained_models,
-            'meta_model': self.meta_model
-        }, results_path)
-        
+            meta_model_path = model_dir / "meta_model.txt"
+            self.meta_model.save_model(str(meta_model_path))
+            logger.info(f"   Saved: {meta_model_path}")
+
+        if self.calibrated_model:
+            calib_path = model_dir / "calibrated_model.pkl"
+            joblib.dump(self.calibrated_model, calib_path)
+            logger.info(f"   Saved: {calib_path}")
+
+        if self.meta_thresholds:
+            thresh_path = model_dir / "regime_thresholds.json"
+            with open(thresh_path, 'w') as f:
+                json.dump(self.meta_thresholds, f)
+
+        if hasattr(self, 'oof_predictions') and self.oof_predictions is not None:
+            oof_path = model_dir / "oof_predictions.parquet"
+            self.oof_predictions.to_parquet(oof_path)
+
+        if self.meta_model:
+            feat_path = model_dir / "meta_features_used.json"
+            with open(feat_path, 'w') as f:
+                json.dump({'features': list(self.oof_predictions.columns) if hasattr(self, 'oof_predictions') else []}, f)
+
         logger.info(f"💾 Models saved to: {model_dir}")
 
 def main():
