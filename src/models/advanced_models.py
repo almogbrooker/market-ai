@@ -6,9 +6,8 @@ Advanced model architectures specifically designed for financial market predicti
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
 import math
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
 class MultiHeadAttention(nn.Module):
     """Multi-head attention mechanism for time series"""
