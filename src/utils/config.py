@@ -33,7 +33,10 @@ GAT_HIDDEN = 64
 GAT_OUT = 32
 DROPOUT = 0.3
 
-# ensure dirs
-os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-os.makedirs(DATA_DIR, exist_ok=True)
-os.makedirs(LOG_DIR, exist_ok=True)
+
+def ensure_dirs() -> None:
+    """Create required directories for training and logging."""
+    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(LOG_DIR, exist_ok=True)
+
