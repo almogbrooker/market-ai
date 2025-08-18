@@ -4,6 +4,7 @@ PERFORMANCE DASHBOARD
 Track bot performance vs QQQ with Alpaca API
 """
 
+import logging
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -13,6 +14,9 @@ import requests
 import json
 from datetime import datetime, timedelta
 import time
+
+
+logger = logging.getLogger(__name__)
 
 class PerformanceDashboard:
     def __init__(self):
@@ -249,23 +253,29 @@ class PerformanceDashboard:
         with open('bot_performance_report.html', 'w') as f:
             f.write(html_content)
         
-        print("📊 Performance report saved: bot_performance_report.html")
+        logger.info("📊 Performance report saved: bot_performance_report.html")
         return fig, metrics
 
 def main():
-    print("📊 CREATING PERFORMANCE DASHBOARD")
-    print("=" * 50)
-    
+    logger.info("📊 CREATING PERFORMANCE DASHBOARD")
+    logger.info("=" * 50)
+
     dashboard = PerformanceDashboard()
     fig, metrics = dashboard.save_performance_report()
-    
-    print("\n🎯 PERFORMANCE SUMMARY:")
-    print("=" * 30)
+
+    logger.info("\n🎯 PERFORMANCE SUMMARY:")
+    logger.info("=" * 30)
     for key, value in metrics.items():
-        print(f"{key}: {value}")
-    
-    print(f"\n✅ Bot is outperforming QQQ by {metrics['Alpha (Outperformance)']}")
-    print("📈 View detailed report: bot_performance_report.html")
+        logger.info(f"{key}: {value}")
+
+    logger.info(
+        f"\n✅ Bot is outperforming QQQ by {metrics['Alpha (Outperformance)']}"
+    )
+    logger.info("📈 View detailed report: bot_performance_report.html")
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
     main()
