@@ -389,11 +389,11 @@ class ModelTrainer:
         else:
             cv_splitter = TimeSeriesSplit(n_splits=self.folds)
         
-        # Train time series models
-        ts_results = self._train_ts_models(X, y, cv_splitter)
-        
-        # Train meta-model
-        meta_results = self._train_meta_model(X, y, meta_features, cv_splitter, ts_results)
+        # Train time series models and gather OOF predictions
+        ts_results, oof_predictions = self._train_ts_models(X, y, cv_splitter)
+
+        # Train meta-model using OOF predictions
+        meta_results = self._train_meta_model(X, y, meta_features, oof_predictions, ts_results)
         
         # Combine results
         results = {
@@ -469,65 +469,78 @@ class ModelTrainer:
         
         return X, y, meta_features
     
-    def _train_ts_models(self, X: pd.DataFrame, y: pd.Series, cv_splitter) -> Dict:
+    def _train_ts_models(self, X: pd.DataFrame, y: pd.Series, cv_splitter) -> Tuple[Dict, pd.DataFrame]:
         """Train time series models and collect OOF predictions"""
-        
+
         logger.info("📈 Training time series models...")
-        
-        ts_results = {}
-        # FIXED: Store OOF predictions for meta-model (chat-g-2.txt)
-        oof_predictions = {}
-        
+
+        ts_results: Dict = {}
+        # DataFrame to store OOF predictions from all models
+        oof_predictions = pd.DataFrame(index=X.index)
+
+        feature_cols = [col for col in X.columns if col not in ['Date', 'Ticker']]
+
         for model_name in self.models:
             logger.info(f"🔧 Training {model_name}...")
-            
+
             fold_results = []
             trained_models = []
-            model_oof_preds = {}  # Store OOF predictions for this model
-            
+            model_oof_preds: Dict[int, float] = {}
+
             for fold, (train_idx, test_idx) in enumerate(cv_splitter.split(X)):
-                
+
                 # Prepare fold data
-                X_train = X.iloc[train_idx]
-                X_test = X.iloc[test_idx]
+                X_train = X.iloc[train_idx].copy()
+                X_test = X.iloc[test_idx].copy()
                 y_train = y.iloc[train_idx]
                 y_test = y.iloc[test_idx]
-                
+
+                # Clip/winsorize extremes based on training data
+                lower = X_train[feature_cols].quantile(0.001)
+                upper = X_train[feature_cols].quantile(0.999)
+                X_train[feature_cols] = X_train[feature_cols].clip(lower, upper, axis=1)
+                X_test[feature_cols] = X_test[feature_cols].clip(lower, upper, axis=1)
+
+                # Standardize using training fold statistics only
+                scaler = StandardScaler()
+                X_train[feature_cols] = scaler.fit_transform(X_train[feature_cols])
+                X_test[feature_cols] = scaler.transform(X_test[feature_cols])
+
                 # Create sequences for time series models
                 X_train_seq, y_train_seq = self._create_sequences(X_train, y_train)
                 X_test_seq, y_test_seq = self._create_sequences(X_test, y_test)
-                
+
                 if X_train_seq is None or len(X_train_seq) < 100:
                     logger.warning(f"Fold {fold}: Insufficient data for {model_name}")
                     continue
-                
+
                 # Train model
                 model = self._create_model(model_name, X_train_seq.shape[-1])
                 trained_model = self._train_single_model(
                     model, X_train_seq, y_train_seq, X_test_seq, y_test_seq
                 )
-                
+
                 # Evaluate
                 predictions = self._predict_model(trained_model, X_test_seq)
-                
+
                 # Handle NaN predictions
                 if np.any(np.isnan(predictions)):
                     logger.warning(f"Found {np.sum(np.isnan(predictions))} NaN predictions, replacing with 0")
                     predictions = np.nan_to_num(predictions, nan=0.0)
-                
-                # FIXED: Store OOF predictions with original indices
-                test_original_idx = X_test.index[:len(y_test_seq)]  # Map back to original indices
+
+                # Store OOF predictions with original indices
+                test_original_idx = X_test.index[:len(y_test_seq)]
                 for i, idx in enumerate(test_original_idx):
-                    if i < len(predictions):  # Ensure we don't exceed predictions length
+                    if i < len(predictions):
                         model_oof_preds[idx] = predictions[i]
-                
+
                 metrics = self._calculate_metrics(y_test_seq, predictions)
-                
+
                 fold_results.append(metrics)
                 trained_models.append(trained_model)
-                
+
                 logger.info(f"  Fold {fold}: IC={metrics['ic']:.3f}, MSE={metrics['mse']:.4f}")
-            
+
             # Aggregate results
             if fold_results:
                 avg_metrics = {
@@ -536,22 +549,26 @@ class ModelTrainer:
                     'mae': np.mean([r['mae'] for r in fold_results]),
                     'precision_at_k': np.mean([r['precision_at_k'] for r in fold_results])
                 }
-                
+
                 ts_results[model_name] = {
                     'metrics': avg_metrics,
                     'fold_results': fold_results,
                     'models': trained_models
                 }
-                
-                # FIXED: Assign to self.trained_models for save_models()
+
+                # Assign to self.trained_models for save_models()
                 self.trained_models[model_name] = {
                     'models': trained_models,
                     'metrics': avg_metrics
                 }
-                
+
+                # Store OOF predictions for this model into main DataFrame
+                if model_oof_preds:
+                    oof_predictions.loc[list(model_oof_preds.keys()), f'ts_{model_name}'] = list(model_oof_preds.values())
+
                 logger.info(f"✅ {model_name}: IC={avg_metrics['ic']:.3f}")
-        
-        return ts_results
+
+        return ts_results, oof_predictions
     
     def _create_sequences(self, X: pd.DataFrame, y: pd.Series, seq_len: int = 30) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
         """Create sequences for time series models"""
@@ -632,23 +649,8 @@ class ModelTrainer:
         X_val = np.nan_to_num(X_val, nan=0.0, posinf=1.0, neginf=-1.0)
         y_val = np.nan_to_num(y_val, nan=0.0, posinf=1.0, neginf=-1.0)
         
-        # Normalize inputs to prevent extreme values
-        from sklearn.preprocessing import StandardScaler
-        scaler = StandardScaler()
-        
-        # Reshape for scaling
-        n_samples, seq_len, n_features = X_train.shape
-        X_train_reshaped = X_train.reshape(-1, n_features)
-        X_train_scaled = scaler.fit_transform(X_train_reshaped)
-        X_train = X_train_scaled.reshape(n_samples, seq_len, n_features)
-        
-        # Scale validation data
-        n_val_samples = X_val.shape[0]
-        X_val_reshaped = X_val.reshape(-1, n_features)
-        X_val_scaled = scaler.transform(X_val_reshaped)
-        X_val = X_val_scaled.reshape(n_val_samples, seq_len, n_features)
-        
         # Clip targets to reasonable range
+        n_samples, seq_len, n_features = X_train.shape
         y_train = np.clip(y_train, -1, 1)
         y_val = np.clip(y_val, -1, 1)
         
@@ -666,7 +668,7 @@ class ModelTrainer:
         
         # Optimizer and loss with lower learning rate
         optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5, weight_decay=0.001)
-        criterion = nn.MSELoss()  # More stable than Huber for this case
+        criterion = nn.HuberLoss()
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.5)
         
         # Training loop
@@ -687,22 +689,24 @@ class ModelTrainer:
                 
                 optimizer.zero_grad()
                 outputs = model(batch_X)
-                
-                # Check for NaN in outputs
-                if torch.isnan(outputs['return_prediction']).any():
-                    logger.warning(f"NaN detected in model outputs at epoch {epoch}")
+
+                preds = outputs['return_prediction']
+                if not torch.isfinite(preds).all():
+                    logger.warning(f"Non-finite predictions at epoch {epoch}, reducing LR and skipping batch")
+                    for g in optimizer.param_groups:
+                        g['lr'] *= 0.5
                     continue
-                
-                # Use cost-aware loss instead of plain MSE
-                base_loss = criterion(outputs['return_prediction'], batch_y)
-                cost_penalty = self.cost_aware_loss(outputs['return_prediction'], batch_y)
+
+                base_loss = criterion(preds, batch_y)
+                cost_penalty = self.cost_aware_loss(preds, batch_y)
                 loss = base_loss + cost_penalty
-                
-                # Check for NaN in loss
-                if torch.isnan(loss):
-                    logger.warning(f"NaN loss at epoch {epoch}")
+
+                if not torch.isfinite(loss):
+                    logger.warning(f"Non-finite loss at epoch {epoch}, reducing LR and skipping batch")
+                    for g in optimizer.param_groups:
+                        g['lr'] *= 0.5
                     continue
-                    
+
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                 optimizer.step()
@@ -775,131 +779,108 @@ class ModelTrainer:
             'precision_at_k': precision_at_k
         }
     
-    def _train_meta_model(self, X: pd.DataFrame, y: pd.Series, meta_features: pd.DataFrame, 
-                         cv_splitter, ts_results: Dict) -> Dict:
-        """Train meta-model with probability calibration and expected PnL optimization (chat-g.txt)"""
-        
+    def _train_meta_model(self, X: pd.DataFrame, y: pd.Series, meta_features: pd.DataFrame,
+                         oof_predictions: pd.DataFrame, ts_results: Dict) -> Dict:
+        """Train meta-model with probability calibration and expected PnL optimization"""
+
         logger.info("🎯 Training enhanced meta-model with LightGBM...")
-        
-        if self.meta_model_type == 'lightgbm' and len(ts_results) > 0:
-            # Collect TS model predictions across all folds
-            all_predictions = []
-            all_targets = []
-            all_meta_features = []
-            
-            for fold, (train_idx, test_idx) in enumerate(cv_splitter.split(X)):
-                X_test = X.iloc[test_idx]
-                y_test = y.iloc[test_idx]
-                meta_test = meta_features.iloc[test_idx] if len(meta_features) > 0 else pd.DataFrame(index=test_idx)
-                
-                # Get TS model predictions for this fold
-                ts_predictions = []
-                for model_name in ts_results.keys():
-                    if fold < len(ts_results[model_name]['fold_results']):
-                        # Use actual fold predictions if available
-                        fold_preds = np.zeros(len(test_idx))  # Placeholder - would need actual predictions
-                        ts_predictions.append(fold_preds)
-                
-                if ts_predictions:
-                    # Combine TS predictions with meta features
-                    ts_preds_df = pd.DataFrame(ts_predictions).T
-                    ts_preds_df.columns = [f'ts_{model}' for model in ts_results.keys()]
-                    
-                    combined_features = pd.concat([ts_preds_df, meta_test.reset_index(drop=True)], axis=1)
-                    
-                    all_predictions.append(combined_features)
-                    all_targets.extend(y_test.values)
-                    
-            if all_predictions:
-                # Train LightGBM meta-model
-                train_features = pd.concat(all_predictions, ignore_index=True)
-                train_targets = np.array(all_targets)
-                
-                # FIXED: Proper LightGBM target encoding (chat-g-2.txt)
-                # Ensure targets are in {-1, 0, 1} then convert to {0, 1, 2}
-                train_targets_clipped = np.clip(train_targets, -1, 1).astype(int)
-                train_targets_encoded = train_targets_clipped + 1  # {-1,0,1} -> {0,1,2}
-                
-                # Validate class cardinality
-                unique_classes = np.unique(train_targets_encoded)
-                logger.info(f"📊 LightGBM classes: {unique_classes} (expected: [0, 1, 2])")
-                
-                lgb_train = lgb.Dataset(train_features, label=train_targets_encoded)
-                
-                params = {
-                    'objective': 'multiclass',
-                    'num_class': 3,
-                    'metric': 'multi_logloss',
-                    'boosting_type': 'gbdt',
-                    'num_leaves': 31,
-                    'learning_rate': 0.05,
-                    'feature_fraction': 0.8,
-                    'bagging_fraction': 0.8,
-                    'bagging_freq': 5,
-                    'verbose': -1
+
+        if self.meta_model_type == 'lightgbm' and len(ts_results) > 0 and not oof_predictions.empty:
+            # Build OOF training frame
+            oof_frame = oof_predictions.join(meta_features).join(y.rename('target')).join(X[['Date']])
+
+            ts_cols = [f'ts_{m}' for m in ts_results.keys()]
+            oof_frame.dropna(subset=ts_cols, inplace=True)
+
+            # Sort by date and split for calibration
+            oof_frame.sort_values('Date', inplace=True)
+            split_idx = int(len(oof_frame) * 0.8)
+            train_part = oof_frame.iloc[:split_idx]
+            calib_part = oof_frame.iloc[split_idx:]
+
+            train_features = train_part.drop(columns=['target', 'Date'])
+            train_targets = train_part['target'].values
+            calib_features = calib_part.drop(columns=['target', 'Date'])
+            calib_targets = calib_part['target'].values
+
+            # Proper LightGBM target encoding {-1,0,1} -> {0,1,2}
+            train_targets_encoded = np.clip(train_targets, -1, 1).astype(int) + 1
+            calib_targets_encoded = np.clip(calib_targets, -1, 1).astype(int) + 1
+
+            unique_classes = np.unique(train_targets_encoded)
+            logger.info(f"📊 LightGBM classes: {unique_classes} (expected: [0, 1, 2])")
+
+            lgb_train = lgb.Dataset(train_features, label=train_targets_encoded)
+
+            params = {
+                'objective': 'multiclass',
+                'num_class': 3,
+                'metric': 'multi_logloss',
+                'boosting_type': 'gbdt',
+                'num_leaves': 31,
+                'learning_rate': 0.05,
+                'feature_fraction': 0.8,
+                'bagging_fraction': 0.8,
+                'bagging_freq': 5,
+                'verbose': -1
+            }
+
+            meta_model = lgb.train(
+                params,
+                lgb_train,
+                num_boost_round=100,
+                valid_sets=[lgb_train],
+                callbacks=[lgb.early_stopping(10), lgb.log_evaluation(0)]
+            )
+
+            from sklearn.calibration import CalibratedClassifierCV
+            from sklearn.base import BaseEstimator, ClassifierMixin
+
+            class LGBWrapper(BaseEstimator, ClassifierMixin):
+                def __init__(self, model):
+                    self.model = model
+                    self.classes_ = np.array([0, 1, 2])
+
+                def fit(self, X, y):
+                    return self
+
+                def predict_proba(self, X):
+                    return self.model.predict(X, num_iteration=self.model.best_iteration)
+
+                def predict(self, X):
+                    proba = self.predict_proba(X)
+                    return np.argmax(proba, axis=1)
+
+            # Calibrate on holdout set to avoid leakage
+            try:
+                lgb_wrapper = LGBWrapper(meta_model)
+                calibrated_model = CalibratedClassifierCV(lgb_wrapper, method='isotonic', cv='prefit')
+                calibrated_model.fit(calib_features, calib_targets_encoded)
+                logger.info("✅ LightGBM calibration successful")
+            except Exception as e:
+                logger.warning(f"Calibration failed: {e}, using uncalibrated model")
+                calibrated_model = LGBWrapper(meta_model)
+
+            meta_results = {
+                'type': 'lightgbm_calibrated',
+                'model': meta_model,
+                'calibrated_model': calibrated_model,
+                'feature_names': list(train_features.columns),
+                'thresholds': self._optimize_thresholds_by_regime(train_features, train_targets),
+                'metrics': {
+                    'ic': np.mean([ts_results[m]['metrics']['ic'] for m in ts_results.keys()]),
+                    'mse': np.mean([ts_results[m]['metrics']['mse'] for m in ts_results.keys()]),
+                    'precision_at_k': np.mean([ts_results[m]['metrics']['precision_at_k'] for m in ts_results.keys()])
                 }
-                
-                meta_model = lgb.train(
-                    params,
-                    lgb_train,
-                    num_boost_round=100,
-                    valid_sets=[lgb_train],
-                    callbacks=[lgb.early_stopping(10), lgb.log_evaluation(0)]
-                )
-                
-                # Probability calibration (chat-g.txt requirement)
-                from sklearn.calibration import CalibratedClassifierCV
-                from sklearn.base import BaseEstimator, ClassifierMixin
-                
-                class LGBWrapper(BaseEstimator, ClassifierMixin):
-                    def __init__(self, model):
-                        self.model = model
-                        self.classes_ = np.array([0, 1, 2])  # Required for classifier
-                    
-                    def fit(self, X, y):
-                        return self
-                    
-                    def predict_proba(self, X):
-                        raw_preds = self.model.predict(X, num_iteration=self.model.best_iteration)
-                        # LightGBM multiclass returns shape (n_samples, n_classes)
-                        return raw_preds
-                    
-                    def predict(self, X):
-                        proba = self.predict_proba(X)
-                        return np.argmax(proba, axis=1)
-                
-                # Apply calibration with fallback
-                try:
-                    lgb_wrapper = LGBWrapper(meta_model)
-                    calibrated_model = CalibratedClassifierCV(lgb_wrapper, method='isotonic', cv=3)
-                    calibrated_model.fit(train_features, train_targets_encoded)
-                    logger.info("✅ LightGBM calibration successful")
-                except Exception as e:
-                    logger.warning(f"Calibration failed: {e}, using uncalibrated model")
-                    calibrated_model = LGBWrapper(meta_model)
-                
-                # Calculate expected PnL thresholds per regime (chat-g.txt)
-                meta_results = {
-                    'type': 'lightgbm_calibrated',
-                    'model': meta_model,
-                    'calibrated_model': calibrated_model,
-                    'feature_names': list(train_features.columns),
-                    'thresholds': self._optimize_thresholds_by_regime(train_features, train_targets),
-                    'metrics': {
-                        'ic': np.mean([ts_results[model]['metrics']['ic'] for model in ts_results.keys()]),
-                        'mse': np.mean([ts_results[model]['metrics']['mse'] for model in ts_results.keys()]),
-                        'precision_at_k': np.mean([ts_results[model]['metrics']['precision_at_k'] for model in ts_results.keys()])
-                    }
-                }
-                
-                logger.info(f"✅ LightGBM Meta-model with calibration trained")
-            else:
-                # Fallback to simple ensemble
-                meta_results = self._simple_ensemble_fallback(ts_results)
+            }
+
+            self.meta_model = meta_model
+            self.calibrated_model = calibrated_model
+
+            logger.info("✅ LightGBM Meta-model with calibration trained")
         else:
-            # Fallback to simple ensemble
             meta_results = self._simple_ensemble_fallback(ts_results)
-        
+
         return meta_results
     
     def _simple_ensemble_fallback(self, ts_results: Dict) -> Dict:
