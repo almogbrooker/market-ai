@@ -4,21 +4,16 @@ Paper Trading with Alpaca Integration
 Implements Phase 5 from chat-g-2.txt: Live paper trading with real market data
 """
 
-import pandas as pd
-import numpy as np
 import logging
 from typing import Dict, List, Optional
 from pathlib import Path
-import time
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 import asyncio
 import signal
-import sys
 
 try:
-    import alpaca_trade_api as tradeapi
-    from alpaca_trade_api.rest import REST, TimeFrame
+    from alpaca_trade_api.rest import REST
     ALPACA_AVAILABLE = True
 except ImportError:
     ALPACA_AVAILABLE = False
@@ -227,7 +222,6 @@ class PaperTrader:
         """Determine if a position should be closed"""
         
         entry_price = float(position.avg_entry_price)
-        quantity = float(position.qty)
         side = position.side
         
         # Calculate current P&L percentage
@@ -319,12 +313,12 @@ class PaperTrader:
         
         logger.info(f"🔄 Executing {len(signals)} trades...")
         
-        for signal in signals:
+        for trade_signal in signals:
             try:
-                symbol = signal['symbol']
-                side = signal['side']
-                prob_diff = signal['prob_diff']
-                current_price = signal['current_price']
+                symbol = trade_signal['symbol']
+                side = trade_signal['side']
+                prob_diff = trade_signal['prob_diff']
+                current_price = trade_signal['current_price']
 
                 if not current_price:
                     logger.warning(f"No price available for {symbol}")
@@ -405,7 +399,7 @@ class PaperTrader:
         if self.api:
             try:
                 # Submit closing order
-                order = self.api.close_position(symbol)
+                self.api.close_position(symbol)
                 logger.info(f"📝 Position closed: {symbol}")
                 
             except Exception as e:
