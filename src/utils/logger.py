@@ -27,18 +27,18 @@ def setup_logging(level=logging.INFO, log_dir='logs'):
     root_logger.setLevel(level)
     
     # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(level)
-    console_handler.setFormatter(simple_formatter)
-    
+    if not any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers):
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(level)
+        console_handler.setFormatter(simple_formatter)
+        root_logger.addHandler(console_handler)
+
     # File handler
-    log_file = Path(log_dir) / f"trading_system_{datetime.now().strftime('%Y%m%d')}.log"
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(detailed_formatter)
-    
-    # Add handlers
-    root_logger.addHandler(console_handler)
-    root_logger.addHandler(file_handler)
-    
+    if not any(isinstance(h, logging.FileHandler) for h in root_logger.handlers):
+        log_file = Path(log_dir) / f"trading_system_{datetime.now().strftime('%Y%m%d')}.log"
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(detailed_formatter)
+        root_logger.addHandler(file_handler)
+
     return root_logger

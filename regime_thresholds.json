@@ -1,0 +1,9 @@
+{
+  "super_bull": {"buy": 0.70, "sell": 0.30, "quality": 0.50},
+  "strong_bull": {"buy": 0.65, "sell": 0.35, "quality": 0.50},
+  "bull": {"buy": 0.60, "sell": 0.40, "quality": 0.40},
+  "mild_bull": {"buy": 0.55, "sell": 0.45, "quality": 0.30},
+  "neutral": {"buy": 0.60, "sell": 0.40, "quality": 0.40},
+  "volatile": {"buy": 0.60, "sell": 0.40, "quality": 0.50},
+  "bear": {"buy": 0.55, "sell": 0.45, "quality": 0.50}
+}
