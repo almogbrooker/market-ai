@@ -1,0 +1,188 @@
+🔧 Critical fixes (do these first)
+1) PurgedTimeSeriesSplit is using “day counts” as indices
+
+File: model_trainer.py → class PurgedTimeSeriesSplit
+
+Problem: purge_days is treated like “number of unique dates to skip”, not calendar days. embargo_days is never enforced.
+
+Fix:
+
+Use real dates to compute the purge window before the test block and the embargo window after it:
+
+Train end date = test_start_date - purge_days
+
+Embargo start = test_end_date + 1
+
+Embargo end = test_end_date + embargo_days
+
+Build train_mask as: all rows with Date ≤ train_end_date AND not in embargo window.
+
+Build test_mask as: Date ∈ [test_start_date, test_end_date].
+
+Ensure min_train_size (e.g., ≥252 trading days) before yielding the fold.
+
+Outcome: true purged CV per López de Prado, no leakage.
+
+2) Meta-model is trained on placeholder zeros
+
+File: model_trainer.py → _train_meta_model
+
+Problem: You’re appending fold_preds = np.zeros(...) instead of real out-of-fold TS predictions. This makes the meta-model meaningless.
+
+Fix (must):
+
+During _train_ts_models, for each fold:
+
+After training, compute predictions on that fold’s test sequences and store them with their original indices.
+
+Build an OOF predictions frame across folds:
+
+Columns: ts_patchtst, ts_itransformer, ts_gru (one column per model)
+
+Index: original row indices of X (test indices per fold)
+
+In _train_meta_model, join these OOF columns with your meta_features.iloc[test_idx], and the target y.iloc[test_idx].
+
+Train LightGBM on OOF-only features (no leakage).
+
+Outcome: a real blender that learns how each base model behaves on unseen data.
+
+3) Save/restore trained models map
+
+File: model_trainer.py → _train_ts_models & save_models
+
+Problem: save_models() expects self.trained_models[...], but you never assign it.
+
+Fix:
+
+After each model finishes CV, set:
+
+self.trained_models[model_name] = {'models': trained_models, 'metrics': avg_metrics}
+
+In save_models(), iterate exactly this dict (already coded).
+
+Outcome: models get persisted correctly.
+
+4) You define cost_aware_loss but never use it
+
+File: model_trainer.py → _train_single_model
+
+Problem: The docstring promises “transaction-cost aware loss,” but training uses plain Huber.
+
+Fix (simple):
+
+Compute both:
+
+base = HuberLoss(pred, y)
+
+cost_penalty = mean(|pred| * 10) where |pred| < transaction_cost else 0
+
+Use loss = base + λ * cost_penalty (start λ=1.0).
+
+Keep Huber for robustness, but enforce “don’t predict tiny signals”.
+
+Outcome: fewer weak “noisy” signals; better precision@K.
+
+5) No feature scaling per fold (can cause NaNs/instability)
+
+File: model_trainer.py → _create_sequences (called inside CV)
+
+Problem: Features can explode (different units), and you skip sequences with NaNs—wastes data.
+
+Fix:
+
+Before building sequences per fold:
+
+Fit a StandardScaler on train feature columns only.
+
+Transform both train & test features with that scaler.
+
+Clip/winsorize extremes (e.g., 0.1%–99.9%) before scaling.
+
+Keep the NaN filter but you should see far fewer drops.
+
+Outcome: stable training; fewer NaNs; better convergence.
+
+6) Calibration must not reuse training data
+
+File: model_trainer.py → _train_meta_model
+
+Problem: CalibratedClassifierCV is fit on the same OOF frame you trained the meta model on (leakage).
+
+Fix:
+
+Split the OOF frame (e.g., 80/20 by date) → train meta on 80%, calibrate on the 20% holdout.
+
+Or nest CV: meta CV for predictions; calibration CV on a different split.
+
+Outcome: probabilities mean what they say.
+
+7) LightGBM target encoding
+
+File: model_trainer.py → _train_meta_model
+
+Problem: You pass targets + 1 hoping for {0,1,2}. Good idea—but confirm the type is int and class cardinality = 3.
+
+Fix:
+
+train_targets = (y_meta ∈ {-1,0,1}).astype(int) + 1
+
+Validate: np.unique(train_targets) == [0,1,2].
+
+Outcome: avoids silent LightGBM quirks.
+
+🛡️ Stability & NaN hardening
+
+Training loop guardrails (in _train_single_model)
+
+After forward: if not torch.isfinite(pred).all() or not torch.isfinite(loss): skip batch and reduce LR once (×0.5).
+
+Gradient clipping is good; keep clip_grad_norm_=1.0 (or 0.5 if you still see spikes).
+
+For debugging runs: torch.autograd.set_detect_anomaly(True) (short runs only).
+
+Scheduler risk
+
+Start with ReduceLROnPlateau (you already do) and no OneCycle until everything’s stable.
+
+If you reintroduce OneCycle: much lower max_lr and gentle pct_start=0.1.
+
+BatchNorm
+
+Don’t add BN inside GRU/transformer blocks; use LN or none. (You already avoid BN—good.)
+
+📐 Labeling & targets sanity
+
+You’re regressing to meta-labels (−1/0/+1) with Huber. That’s fine for a directional scorer.
+
+Add a second head or a parallel small classifier for prob_up if you want crisp class probabilities for the meta-learner.
+
+Triple-barrier: you implemented a simplified 5-day look-ahead. Good; keep it as meta feature, not the primary label.
+
+📦 Manager wiring checks
+
+File: manager.py
+
+Paths look fine. Ensure src/… modules exist (data_builder.py, backtester.py, paper_trader.py, utils/logger.py).
+
+In build-data:
+
+Make sure DataBuilder outputs Date as datetime64 and sorted, includes Ticker, and no NaNs in feature columns (your validator enforces this).
+
+In train:
+
+Pass the exact dataset path from build step (defaults match).
+
+Expect longer runs with CV; start with --folds 3 to verify end-to-end.
+
+📈 What becomes your “best model”?
+
+With proper OOF stacking, the LightGBM meta-model will usually beat any single base learner on Precision@K and IC.
+
+Keep all three: PatchTST, iTransformer, GRU (diversity matters).
+
+Use ensemble IC and precision@K to pick snapshot for deployment.
+
+In live trading, route the meta-model’s class probabilities through your regime-aware thresholds (already designed).
+
+✅ Minimal acceptance checklist (green-light before backtest)

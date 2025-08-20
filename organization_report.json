@@ -1,0 +1,25 @@
+{
+  "organization_date": "2025-08-20T12:02:27.907284",
+  "total_files_organized": 193,
+  "directory_structure": {
+    "production/": 49,
+    "models/": 95,
+    "data/": 14,
+    "research/": 8,
+    "archive/": 1,
+    "docs/": 11,
+    "config/": 3,
+    "logs/": 8,
+    "tests/": 3,
+    "notebooks/": 1
+  },
+  "backup_location": "/home/almog/market-ai/backup_before_cleanup",
+  "performance_metrics": {
+    "final_ic": 0.0683,
+    "information_ratio": 4.49,
+    "t_stat": 5.26,
+    "tier": "TOP_1_PERCENT"
+  },
+  "production_ready": true,
+  "institutional_grade": true
+}

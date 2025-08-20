@@ -1,0 +1,135 @@
+Awesome structure 👏 — this is very close to “production-ready.” Before we call it done, here’s a tight audit + action list to make it robust, leak-free, and safer in live trading. No code below, just what to change/add.
+
+🔥 Critical fixes (do these first)
+
+True stacking (OOF) for the meta-model
+
+Build out-of-fold predictions for each base model (GRU / PatchTST / iTransformer) and train LightGBM only on OOF + meta features.
+
+Remove any placeholder zeros. Save oof_predictions.parquet and verify no NaNs.
+
+Report global OOF IC & Precision@K per model and for the ensemble.
+
+Consistent scaling
+
+Fit scaler per fold on train, apply to that fold’s test; persist each scaler with the fold’s model.
+
+Ensure backtester and live inference load and apply the same scaler before sequencing.
+
+Calibration without leakage
+
+Split the OOF table by date into meta-train (≈80%) and OOF-holdout (≈20%).
+
+Train LightGBM on meta-train; fit isotonic calibration on the holdout only.
+
+Save both the raw LGBM model and the calibrated wrapper separately.
+
+Save the right artifacts
+
+PyTorch models: *.pt (per fold) + JSON metadata (seq_len, features, scaler path).
+
+LightGBM: meta_model.txt; calibration: calibrated_meta.pkl.
+
+Thresholds by regime: regime_thresholds.json.
+
+OOF table: oof_predictions.parquet.
+
+Purged CV details
+
+You already purge before the test. Either drop the “post-test embargo” from train (it’s redundant with your train_end date), or implement symmetric embargo strictly around each test window.
+
+Log: fold train range, purge days, test range, embargo days.
+
+Class imbalance in meta-labels
+
+Dead-zone usually dominates. In LightGBM set is_unbalance=True or custom class weights, or downsample class 0 for the meta-model.
+
+Determinism
+
+Set seeds for NumPy, PyTorch (and cuDNN deterministic), LightGBM. Log the seed and environment (Python & package versions).
+
+Backtester parity
+
+Backtester must use calibrated probabilities + saved regime thresholds + the same scalers and feature list. Verify fee/slippage/short-borrow are applied on every trade and side.
+
+📈 Modeling & data improvements (quick wins)
+
+Regime-conditioned thresholds: Learn (buy_prob, sell_prob) per regime on the OOF-holdout to maximize net PnL (fees+slippage included). Save to regime_thresholds.json.
+
+Uncertainty → sizing: Use conformal intervals or prediction dispersion to modulate position size (cap size when uncertainty high).
+
+Leakage guards: In data_builder, assert no future fields (e.g., forward returns, post-close news) leak into features at t.
+
+Survivorship bias: If nasdaq100_tickers.txt is current constituents only, add historical constituents or filter by listing date to avoid bias.
+
+Corporate actions: Ensure prices are adjusted for splits/dividends; benchmark QQQ with total return, not price only.
+
+News/sentiment timestamps: Make sure all news/sentiment features are timestamped pre-market close (or use next-day trade timing).
+
+🛡️ Live-trading safeguards
+
+Order idempotency: Keep a per-symbol trade ledger (SQLite) so retries don’t duplicate orders.
+
+Kill switch: Stop trading if (a) data stale, (b) drawdown > X%, (c) model confidence collapses, (d) too many API errors.
+
+Risk budgets: Enforce max gross, max per-name, sector caps, and a daily VaR/vol budget. Cut sizes when VIX spikes.
+
+Market hours & holidays: Check exchange calendar; avoid orders at open/close if slippage is high (or widen thresholds).
+
+Borrow ability for shorts (paper ≠ live): add a “can short?” check or penalize expected PnL if borrow uncertain.
+
+🔍 Validation checklist (run these before live scale-up)
+
+Data health
+
+No NaNs/Infs in feature matrix after joins; no duplicate rows; consistent per-ticker dates.
+
+Confirm Date is timezone-aware or consistently naive everywhere.
+
+OOF integrity
+
+Each ts_* OOF column covers the full dataset except the initial seq_len per ticker.
+
+Global OOF metrics printed and saved (IC, Precision@K, ROC-AUC on ±1 vs 0).
+
+Calibration quality
+
+Reliability plots on the OOF-holdout (bucketed prob vs realized).
+
+Expected value at trade threshold is > costs across regimes.
+
+Backtest honesty
+
+Trades executed at next open/close exactly as configured; no look-ahead.
+
+Fees/slippage applied; short borrow cost applied to shorts.
+
+Report: alpha vs QQQ total return, Sharpe, Sortino, turnover, max DD, exposure.
+
+Reproducibility
+
+Re-run training with same seed → same OOF metrics (within noise).
+
+Re-run backtest on saved artifacts → identical results.
+
+🧪 Rollout plan (low risk)
+
+Canary: Paper trade for 2–4 weeks with tiny allocations; compare live fills vs simulated.
+
+Shadow mode: Generate signals without execution; verify slippage estimates.
+
+Gradual scale-up: Increase max gross and per-name limits stepwise only if realized metrics match backtest ± tolerance.
+
+Monitoring: Real-time dashboard for exposure, PnL, drawdown, turnover, hit rate, and error budget (API/data).
+
+📦 Project hygiene
+
+Lock dependencies (requirements.txt pinned), export environment file, and record in artifacts/models/best/*_meta.json.
+
+Version artifacts by run timestamp; never overwrite best models without archiving the old ones.
+
+Secrets in .env only; never in code or logs.
+
+🏁 Bottom line
+
+You’re ~90% there. The must-fix items are: proper OOF stacking, consistent scaling + persistence, leakage-free calibration, artifact saving, and backtester parity. Once those are in, the ensemble will be both honest (OOF-proven) and deployable (reproducible, safe).

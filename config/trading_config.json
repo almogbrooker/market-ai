@@ -1,0 +1,15 @@
+{
+  "trading": {
+    "max_position_size": 0.15,
+    "transaction_cost": 0.001,
+    "rebalance_frequency": 5,
+    "max_daily_loss": -0.03,
+    "portfolio_volatility": 0.15
+  },
+  "risk_management": {
+    "conformal_gating": true,
+    "beta_neutralization": true,
+    "cross_sectional_ranking": true,
+    "purged_cv": true
+  }
+}
