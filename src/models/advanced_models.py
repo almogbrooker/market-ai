@@ -317,11 +317,14 @@ class EnsembleModel(nn.Module):
         
     def forward(self, x):
         # Get predictions from both models
-        lstm_pred = self.lstm_model(x)
+        lstm_out = self.lstm_model(x)
+        lstm_pred = lstm_out['return_prediction']
         transformer_outputs = self.transformer_model(x)
         transformer_pred = transformer_outputs['return_prediction']
         confidence = transformer_outputs['confidence_score']
         volatility = transformer_outputs['volatility_prediction']
+        lstm_log_variance = lstm_out.get('log_variance')
+        lstm_volatility = lstm_out.get('volatility_prediction')
         
         # Weighted ensemble
         weights = F.softmax(self.ensemble_weights, dim=0)
@@ -342,7 +345,9 @@ class EnsembleModel(nn.Module):
             'meta_prediction': meta_pred,
             'confidence': confidence,
             'volatility': volatility,
-            'weights': weights
+            'weights': weights,
+            'lstm_log_variance': lstm_log_variance,
+            'lstm_volatility': lstm_volatility
         }
 
 class WaveNet(nn.Module):
