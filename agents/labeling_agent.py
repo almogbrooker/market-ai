@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 import warnings
 warnings.filterwarnings('ignore')
@@ -34,7 +34,7 @@ class LabelingAgent:
         self.features_path = self.artifacts_dir / "features" / "daily.parquet"
         
         logger.info("📋 Target Types:")
-        logger.info("   Primary: 21-day excess return (stock - sector ETF)")
+        logger.info("   Primary: Next-day residual return (stock - QQQ & sector effects)")
         logger.info("   Meta-labels: Trinary {-1,0,+1} via dead-zone ±(cost + 10bps)")
         logger.info("   Barrier: 5-day triple-barrier outcome (TP/SL/timeout)")
         
@@ -57,15 +57,18 @@ class LabelingAgent:
             df = df.sort_values(['Ticker', 'Date'])
             
             logger.info(f"📊 Loaded features: {len(df)} samples, {df['Ticker'].nunique()} tickers")
-            
-            # Create primary targets - 21-day excess returns
-            df = self._create_excess_return_targets(df)
-            
+
+            # Create primary targets - next-day residual returns
+            df = self._create_residual_return_targets(df)
+
             # Create meta-labels - trinary classification
             df = self._create_meta_labels(df)
-            
+
             # Create barrier labels - triple-barrier outcomes
             df = self._create_barrier_labels(df)
+
+            # Lag all feature columns by at least one day to avoid leakage
+            df = self._lag_features(df)
             
             # Leakage audit
             if not self._leakage_audit(df):
@@ -82,43 +85,55 @@ class LabelingAgent:
             logger.error(f"❌ Failed to create targets: {e}")
             return False
     
-    def _create_excess_return_targets(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Create 21-day excess return targets
-        Chat-G.txt: next-21 trading day excess return (stock return - sector ETF return)
-        """
-        
-        logger.info("📈 Creating 21-day excess return targets...")
-        
+    def _create_residual_return_targets(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Create next-day residual return targets via market/sector regression."""
+
+        logger.info("📈 Creating next-day residual return targets...")
+
         df = df.copy()
-        
-        # Calculate 21-day forward returns
-        df['return_21d_forward'] = df.groupby('Ticker')['Close'].pct_change(periods=-21).shift(-21)
-        
-        # Create sector ETF proxy returns (simplified for MVP)
-        # In production, would use actual sector ETF data
-        sector_returns = df.groupby(['Date', 'sector'])['return_21d_forward'].median().reset_index()
-        sector_returns = sector_returns.rename(columns={'return_21d_forward': 'sector_return_21d'})
-        
-        # Merge sector returns
-        df = df.merge(sector_returns, on=['Date', 'sector'], how='left')
-        
-        # Calculate excess returns (stock - sector)
-        df['excess_return_21d'] = df['return_21d_forward'] - df['sector_return_21d']
-        
-        # Fill missing sector returns with market median
-        market_median = df.groupby('Date')['return_21d_forward'].median()
-        df = df.merge(market_median.reset_index().rename(columns={'return_21d_forward': 'market_return_21d'}), 
-                     on='Date', how='left')
-        
-        # Use market return as fallback for sector return
-        df['sector_return_21d'] = df['sector_return_21d'].fillna(df['market_return_21d'])
-        df['excess_return_21d'] = df['excess_return_21d'].fillna(
-            df['return_21d_forward'] - df['market_return_21d']
-        )
-        
-        logger.info(f"✅ Excess return targets created: {df['excess_return_21d'].notna().sum()} valid targets")
-        
+
+        # Compute next-day forward return for each ticker
+        df['next_close'] = df.groupby('Ticker')['Close'].shift(-1)
+        df['return_1d_forward'] = (df['next_close'] - df['Close']) / df['Close']
+
+        # Load QQQ returns for market proxy
+        qqq_path = self.base_dir / "data" / "QQQ.csv"
+        qqq = pd.read_csv(qqq_path, parse_dates=['Date'])
+        qqq = qqq.sort_values('Date')
+        qqq['qqq_next_close'] = qqq['Close'].shift(-1)
+        qqq['qqq_return_1d'] = (qqq['qqq_next_close'] - qqq['Close']) / qqq['Close']
+        qqq = qqq[['Date', 'qqq_return_1d']]
+
+        # Merge market returns
+        df = df.merge(qqq, on='Date', how='left')
+
+        # Cross-sectional regression by date against QQQ and sector dummies
+        df['residual_return_1d'] = np.nan
+        for date, group in df.groupby('Date'):
+            y = group['return_1d_forward'].values
+
+            if np.isnan(y).all():
+                continue
+
+            X = np.ones((len(group), 1))  # intercept
+            market = group['qqq_return_1d'].values.reshape(-1, 1)
+            X = np.concatenate([X, market], axis=1)
+
+            if 'sector' in group.columns:
+                sector_dummies = pd.get_dummies(group['sector'])
+                X = np.concatenate([X, sector_dummies.values], axis=1)
+
+            beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+            fitted = X @ beta
+            resid = y - fitted
+            df.loc[group.index, 'residual_return_1d'] = resid
+
+        # Clean up intermediate columns
+        df = df.drop(columns=['next_close', 'return_1d_forward', 'qqq_return_1d'], errors='ignore')
+
+        valid = df['residual_return_1d'].notna().sum()
+        logger.info(f"✅ Residual return targets created: {valid} valid targets")
+
         return df
     
     def _create_meta_labels(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -136,8 +151,8 @@ class LabelingAgent:
         
         # Create trinary labels
         conditions = [
-            df['excess_return_21d'] > cost_threshold,   # +1: Strong positive
-            df['excess_return_21d'] < -cost_threshold,  # -1: Strong negative
+            df['residual_return_1d'] > cost_threshold,   # +1: Strong positive
+            df['residual_return_1d'] < -cost_threshold,  # -1: Strong negative
         ]
         choices = [1, -1]
         df['meta_label'] = np.select(conditions, choices, default=0)  # 0: Dead zone
@@ -209,7 +224,21 @@ class LabelingAgent:
         logger.info(f"📊 Barrier label distribution:")
         for label, count in barrier_counts.items():
             logger.info(f"   {label}: {count} ({count/len(df)*100:.1f}%)")
-        
+
+        return df
+
+    def _lag_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Lag all non-target feature columns by one day to prevent leakage."""
+
+        df = df.copy()
+
+        exclude_cols = {
+            'Date', 'Ticker', 'Close', 'sector',
+            'residual_return_1d', 'meta_label', 'barrier_label'
+        }
+        feature_cols = [col for col in df.columns if col not in exclude_cols]
+
+        df[feature_cols] = df.groupby('Ticker')[feature_cols].shift(1)
         return df
     
     def _leakage_audit(self, df: pd.DataFrame) -> bool:
@@ -220,54 +249,23 @@ class LabelingAgent:
         
         logger.info("🔍 Performing leakage audit...")
         
-        # Check that all features are properly lagged
-        feature_cols = [col for col in df.columns if col.endswith('_lag1') or col.endswith('_lag0')]
-        
-        # All features should be lagged (already enforced in feature engineering)
-        if len(feature_cols) == 0:
-            logger.error("No properly lagged features found")
+        # Define columns that should not be treated as features
+        target_cols = ['residual_return_1d', 'meta_label', 'barrier_label']
+        exclude_cols = {
+            'Date', 'Ticker', 'Open', 'High', 'Low', 'Close', 'Volume', 'sector', 'industry'
+        }
+
+        feature_cols = [col for col in df.columns if col not in target_cols and col not in exclude_cols]
+        if not feature_cols:
+            logger.error("No feature columns found for leakage audit")
             return False
-        
-        # Check that target columns don't use future information
-        target_cols = ['excess_return_21d', 'meta_label', 'barrier_label']
-        
-        # These targets use forward-looking information by design (that's the point)
-        # The key is that features must be lagged relative to the target start date
-        
-        # Verify no features accidentally use same-day or future information
-        risky_cols = [col for col in df.columns if not any([
-            col.endswith('_lag1'),
-            col.endswith('_lag0'), 
-            col in ['Date', 'Ticker', 'Open', 'High', 'Low', 'Close', 'Volume', 'sector', 'industry'],
-            col in target_cols,
-            col.startswith('return_21d_forward'),  # Intermediate calculation
-            col.startswith('sector_return'),       # Intermediate calculation
-            col.startswith('market_return')        # Intermediate calculation
-        ])]
-        
-        if risky_cols:
-            logger.error(f"Potential leakage in columns: {risky_cols}")
-            return False
-        
-        # Check temporal consistency - no target before minimum feature date
-        min_feature_dates = df.groupby('Ticker')['Date'].min()
-        
-        # For each ticker, verify targets start after sufficient lag period
-        for ticker in df['Ticker'].unique():
-            ticker_data = df[df['Ticker'] == ticker]
-            min_date = min_feature_dates[ticker]
-            
-            # Need at least 21 days of history for lags + 21 days forward for target
-            required_history = timedelta(days=60)
-            
-            valid_target_data = ticker_data[
-                (ticker_data['Date'] >= min_date + required_history) & 
-                (ticker_data['excess_return_21d'].notna())
-            ]
-            
-            if len(valid_target_data) == 0:
-                logger.warning(f"No valid targets for {ticker} after leakage check")
-        
+
+        # First observation per ticker should be NaN after lagging
+        for col in feature_cols:
+            if df.groupby('Ticker')[col].first().notna().any():
+                logger.error(f"Potential leakage detected in column: {col}")
+                return False
+
         logger.info("✅ Leakage audit passed")
         return True
     
@@ -289,12 +287,12 @@ class LabelingAgent:
             'unique_tickers': df['Ticker'].nunique(),
             'date_range': [str(df['Date'].min()), str(df['Date'].max())],
             'target_statistics': {
-                'excess_return_21d': {
-                    'count': df['excess_return_21d'].notna().sum(),
-                    'mean': float(df['excess_return_21d'].mean()),
-                    'std': float(df['excess_return_21d'].std()),
-                    'min': float(df['excess_return_21d'].min()),
-                    'max': float(df['excess_return_21d'].max())
+                'residual_return_1d': {
+                    'count': df['residual_return_1d'].notna().sum(),
+                    'mean': float(df['residual_return_1d'].mean()),
+                    'std': float(df['residual_return_1d'].std()),
+                    'min': float(df['residual_return_1d'].min()),
+                    'max': float(df['residual_return_1d'].max())
                 },
                 'meta_label_distribution': df['meta_label'].value_counts().to_dict(),
                 'barrier_label_distribution': df['barrier_label'].value_counts().to_dict()
@@ -312,7 +310,7 @@ class LabelingAgent:
         logger.info(f"✅ Labels saved:")
         logger.info(f"   Dataset: {labels_path}")
         logger.info(f"   Summary: {summary_path}")
-        logger.info(f"   Total samples with targets: {df['excess_return_21d'].notna().sum()}")
+        logger.info(f"   Total samples with targets: {df['residual_return_1d'].notna().sum()}")
 
 def main():
     """Test the labeling agent"""

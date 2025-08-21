@@ -32,7 +32,7 @@
 
 #### **2) Labeling & Target Agent** - `agents/labeling_agent.py` ✅ COMPLETE
 - **Features**:
-  - **Primary Target**: 21-day excess returns (stock - sector ETF)
+  - **Primary Target**: Next-day residual returns (stock vs QQQ + sector dummies)
   - **Meta-Labels**: Trinary classification with dead-zone (±25bps cost threshold)
   - **Barrier Labels**: 5-day triple-barrier outcomes (TP/SL/timeout)
   - **Leakage Audit**: Comprehensive temporal validation

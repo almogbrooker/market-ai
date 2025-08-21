@@ -2,7 +2,7 @@
   "baseline_ranker": {
     "model_type": "lightgbm",
     "objective": "regression",
-    "target": "excess_return_21d",
+    "target": "residual_return_1d",
     "max_features": 40,
     "regularization": {
       "max_depth": 6,
