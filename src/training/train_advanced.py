@@ -156,7 +156,8 @@ class AdvancedTrainer:
         logger.info(f"🎯 Target: >60% validation accuracy")
         logger.info("="*80)
 
-        self._auto_detect_checkpoints()  # from prior runs to resume:contentReference[oaicite:1]{index=1}
+        # Attempt to resume training from checkpoints created in prior runs
+        self._auto_detect_checkpoints()
 
     # ----------------------- Session Logging -----------------------
     def _log_session_status(self):
