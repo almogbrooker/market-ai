@@ -1,0 +1,4 @@
+SYSTEM_TRAINED_WITH_FIXED_DATASET
+Training completed: 2025-08-21 17:04:57.799090
+Training samples: 15,768
+IC fix applied: YES

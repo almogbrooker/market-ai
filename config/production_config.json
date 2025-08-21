@@ -139,7 +139,7 @@
   
   "deployment_path": {
     "phase_1": "research_sandbox",
-    "phase_2": "paper_trading_months": 6,
+    "phase_2_paper_trading_months": 6,
     "phase_3": "small_capital_live",
     "phase_4": "scale_based_on_capacity"
   },

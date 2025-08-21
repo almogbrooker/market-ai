@@ -1,0 +1,175 @@
+{
+  "timestamp": "2025-08-21T16:51:47.381620",
+  "validation_type": "complete_offline_validation",
+  "phase_1_initialization": {
+    "success": true,
+    "training_samples": 15768,
+    "training_results": {
+      "lgbm": {
+        "status": "loaded_existing",
+        "n_models": 3
+      },
+      "lstm": {
+        "status": "trained",
+        "best_val_loss": 0.06991619084562574,
+        "final_epoch": 8,
+        "train_losses": [
+          0.07029797855232443,
+          0.06988349264221531,
+          0.06981789240879673,
+          0.0697217227092811,
+          0.069638263966356,
+          0.06960549604679857,
+          0.06966528961701053,
+          0.06945003728781428,
+          0.06947887954967362
+        ],
+        "val_losses": [
+          0.06991619084562574,
+          0.06994910325322833,
+          0.06996540831668037,
+          0.07001938351563045,
+          0.07013648535524096,
+          0.0699667941246714,
+          0.0703466289809772,
+          0.07009783174310412,
+          0.07016810987676893
+        ]
+      },
+      "regime": {
+        "status": "disabled"
+      },
+      "meta": {
+        "status": "trained",
+        "train_mse": 0.0005731386186464131,
+        "val_mse": 0.0006458134862050288,
+        "train_ic": 0.022106333852271263,
+        "val_ic": 0.007290090939489379,
+        "feature_importance": "                 feature  importance\n16     score_consistency    0.000283\n2        score_agreement    0.000264\n13        lgbm_abs_score    0.000095\n0             lgbm_score    0.000095\n1             lstm_score    0.000062\n3   score_magnitude_diff    0.000007\n14        lstm_abs_score    0.000005\n15    ensemble_abs_score    0.000003\n4        score_rank_corr    0.000000\n8        regime_high_vol    0.000000\n7            regime_bear    0.000000\n6         regime_neutral    0.000000\n5            regime_bull    0.000000\n12               breadth    0.000000\n11              momentum    0.000000\n10            market_vol    0.000000\n9              vix_level    0.000000",
+        "n_features": 17,
+        "combiner_type": "ridge"
+      }
+    },
+    "models_trained": [
+      "lgbm",
+      "lstm",
+      "regime",
+      "meta"
+    ]
+  },
+  "phase_2_performance": {
+    "success": true,
+    "trading_days": 124,
+    "total_return_pct": -20.275334138995948,
+    "annualized_return_pct": -40.550668277991896,
+    "volatility_pct": 13.948955001824048,
+    "sharpe_ratio": -3.228229999957978,
+    "max_drawdown_pct": -23.694886827601998,
+    "hit_rate": 0.4274193548387097,
+    "avg_daily_positions": 8.0,
+    "final_portfolio_value": 797246.6586100406,
+    "performance_passed": "False"
+  },
+  "phase_3_stress_testing": {
+    "success": true,
+    "individual_tests": {
+      "high_volatility": {
+        "max_position": 0.0,
+        "passed": "True"
+      },
+      "market_crash": {
+        "net_exposure": 0.0,
+        "passed": "True"
+      },
+      "low_signal": {
+        "n_tradeable": "0",
+        "passed": "True"
+      }
+    },
+    "pass_rate": 1.0,
+    "stress_tests_passed": "True"
+  },
+  "phase_4_sanity_checks": {
+    "success": true,
+    "individual_checks": {
+      "model_complexity": {
+        "feature_count": 10,
+        "reasonable": true
+      },
+      "prediction_stability": {
+        "correlation": 1.0,
+        "stable": "True"
+      },
+      "position_constraints": {
+        "max_position": 0.0,
+        "total_exposure": 0.0,
+        "constraints_met": "True"
+      }
+    },
+    "sanity_score": 1.0,
+    "sanity_checks_passed": "True"
+  },
+  "phase_5_risk_validation": {
+    "success": true,
+    "scenarios": [
+      {
+        "max_position": 0.0,
+        "gross_exposure": 0.0,
+        "net_exposure": 0.0,
+        "n_positions": "0"
+      },
+      {
+        "max_position": 0.0,
+        "gross_exposure": 0.0,
+        "net_exposure": 0.0,
+        "n_positions": "0"
+      },
+      {
+        "max_position": 0.0,
+        "gross_exposure": 0.0,
+        "net_exposure": 0.0,
+        "n_positions": "0"
+      },
+      {
+        "max_position": 0.0,
+        "gross_exposure": 0.0,
+        "net_exposure": 0.0,
+        "n_positions": "0"
+      },
+      {
+        "max_position": 0.0,
+        "gross_exposure": 0.0,
+        "net_exposure": 0.0,
+        "n_positions": "0"
+      }
+    ],
+    "risk_checks": {
+      "max_position_limit": "True",
+      "gross_exposure_limit": "True",
+      "market_neutral": "True",
+      "position_count_reasonable": "True"
+    },
+    "risk_score": 1.0,
+    "risk_controls_passed": "True"
+  },
+  "final_assessment": {
+    "validation_passed": "True",
+    "confidence_level": "medium",
+    "production_ready": true,
+    "phases_passed": "3/4",
+    "individual_phases": {
+      "performance": "False",
+      "stress_testing": "True",
+      "sanity_checks": "True",
+      "risk_validation": "True"
+    },
+    "key_metrics": {
+      "total_return_pct": -20.275334138995948,
+      "sharpe_ratio": -3.228229999957978,
+      "max_drawdown_pct": -23.694886827601998,
+      "stress_pass_rate": 1.0,
+      "sanity_score": 1.0,
+      "risk_score": 1.0
+    }
+  }
+}
