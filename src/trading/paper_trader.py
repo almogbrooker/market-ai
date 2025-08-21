@@ -11,6 +11,9 @@ import json
 from datetime import datetime
 import asyncio
 import signal
+# Added: timezone for next-bar gating; conformal gate for signal filtering
+from datetime import timezone as _tz
+from src.evaluation.production_conformal_gate import create_production_gate
 
 try:
     from alpaca_trade_api.rest import REST
@@ -27,11 +30,17 @@ class PaperTrader:
     """
     
     def __init__(self, model_dir: str, max_gross: float = 0.6, max_per_name: float = 0.08,
-                 api_key: str = None, secret_key: str = None, base_url: str = None):
+                 api_key: str = None, secret_key: str = None, base_url: str = None,
+                 exec_next_bar: bool = True, alpha: float = 0.15, daily_loss_limit: float = 0.03):
         
         self.model_dir = Path(model_dir)
         self.max_gross = max_gross  # Maximum gross exposure
         self.max_per_name = max_per_name  # Maximum per-name exposure
+        # New: execution & risk controls
+        self.exec_next_bar = exec_next_bar
+        self.daily_loss_limit = daily_loss_limit
+        self.trading_halted = False
+        self._last_bar_ts = None
         
         # Alpaca credentials (use environment variables in production)
         self.api_key = api_key or "YOUR_ALPACA_API_KEY"
@@ -48,9 +57,15 @@ class PaperTrader:
         self.orders = {}
         self.portfolio_value = 0.0
         self.is_trading = False
+
+        # New: regime-aware conformal gate (reduces false positives)
+        try:
+            self.gate = create_production_gate(alpha=alpha)
+        except Exception as _e:
+            logger.warning(f"Conformal gate unavailable ({_e}); proceeding without gating")
+            self.gate = None
         
-        # Risk management
-        self.daily_loss_limit = 0.05  # 5% daily loss limit
+        # Risk management (cleaned up - daily_loss_limit already set above)
         self.position_timeout = 20  # Days to hold position
 
         # Load calibrated regime thresholds
@@ -134,6 +149,23 @@ class PaperTrader:
                     logger.info("📅 Market is closed, waiting...")
                     await asyncio.sleep(300)  # Wait 5 minutes
                     continue
+
+                # New: kill switch—halt trading if risk controls tripped
+                if self.trading_halted:
+                    logger.warning("⛔ Trading halted by risk controls; sleeping 5 minutes")
+                    await asyncio.sleep(300)
+                    continue
+
+                # New: next-bar execution guard (avoid same-bar lookahead)
+                if self.exec_next_bar:
+                    now = datetime.now()  # wall clock; broker clock is used for market-open gate
+                    bar_ts = now.replace(second=0, microsecond=0)
+                    if self._last_bar_ts is None:
+                        self._last_bar_ts = bar_ts
+                    elif bar_ts <= self._last_bar_ts:
+                        await asyncio.sleep(5)
+                        continue
+                    self._last_bar_ts = bar_ts
                 
                 # Update portfolio information
                 self._update_portfolio_info()
@@ -255,41 +287,37 @@ class PaperTrader:
         # 3. Run trained models to get predictions
         # 4. Generate trading signals
         
-        # For now, generate mock signals for demonstration
+        # For now, generate mock **raw** signals, then pass through conformal gate
         if not self._should_generate_signals():
             return []
-        
-        mock_signals = [
-            {
-                'symbol': 'AAPL',
-                'side': 'buy',
-                'prob': 0.76,
-                'prob_diff': 0.52,
-                'quality': 0.97,
-                'expected_return': 0.02,
-                'current_price': self._get_current_price('AAPL')
-            },
-            {
-                'symbol': 'MSFT',
-                'side': 'sell',
-                'prob': 0.70,
-                'prob_diff': 0.40,
-                'quality': 0.96,
-                'expected_return': -0.015,
-                'current_price': self._get_current_price('MSFT')
-            }
-        ]
 
-        # Apply regime thresholds and quality gate
-        filtered_signals = []
-        for s in mock_signals:
-            thr_key = f"{s['side']}_prob"
-            threshold = self.regime_thresholds.get(thr_key, 0.5)
-            if s['prob'] >= threshold and s.get('quality', 1.0) >= self.quality_gate:
-                filtered_signals.append(s)
+        raw_signals = {
+            'AAPL': 0.76,
+            'MSFT': 0.68,
+            'GOOGL': -0.55
+        }
 
-        logger.info(f"🎯 Generated {len(filtered_signals)} trading signals")
-        return filtered_signals
+        # Conformal gating reduces false positives; fall back to raw if gate unavailable
+        gated = raw_signals
+        if self.gate is not None:
+            try:
+                gated = self.gate.batch_filter_signals(raw_signals, regime='neutral')
+            except Exception as e:
+                logger.warning(f"Conformal gating failed: {e}")
+
+        # Convert to list-of-dicts expected downstream
+        signals: List[Dict] = []
+        for sym, sig in gated.items():
+            if abs(sig) <= 0:
+                continue
+            signals.append({
+                'symbol': sym,
+                'side': 'buy' if sig > 0 else 'sell',
+                # Map strength to a probability-like field used by position sizing
+                'prob': min(0.99, max(0.51, abs(sig))),
+                'current_price': self._get_current_price(sym)
+            })
+        return signals
     
     def _should_generate_signals(self) -> bool:
         """Check if we should generate new signals (not too frequently)"""
@@ -440,8 +468,17 @@ class PaperTrader:
             daily_pnl_pct = daily_pnl / float(self.account.last_equity)
             
             if daily_pnl_pct < -self.daily_loss_limit:
-                logger.warning(f"🚨 Daily loss limit exceeded: {daily_pnl_pct:.2%}")
-                # In production, might stop trading for the day
+                logger.warning(f"🚨 Daily loss limit exceeded: {daily_pnl_pct:.2%}; HALTING trading for today")
+                # Kill switch: pause new orders; cancel open ones
+                self.trading_halted = True
+                if self.api:
+                    try:
+                        open_orders = self.api.list_orders(status='open')
+                        for order in open_orders:
+                            self.api.cancel_order(order.id)
+                            logger.info(f"Cancelled order: {order.id}")
+                    except Exception as e:
+                        logger.error(f"Error cancelling orders after loss-limit breach: {e}")
         
         # Check gross exposure
         total_exposure = 0
@@ -452,8 +489,9 @@ class PaperTrader:
         gross_exposure = total_exposure / self.portfolio_value
         
         if gross_exposure > self.max_gross:
-            logger.warning(f"🚨 Gross exposure too high: {gross_exposure:.2%}")
-            # In production, might reduce positions
+            logger.warning(f"🚨 Gross exposure too high: {gross_exposure:.2%}; new orders paused")
+            # Pause new orders until exposure normalizes; optional: implement trimming logic
+            self.trading_halted = True
     
     def _log_trading_status(self):
         """Log current trading status"""

@@ -578,9 +578,11 @@ class DataBuilder:
             ticker_data = ticker_data.sort_values('Date')
             
             # Create forward returns (labels)
-            ticker_data['target_1d'] = ticker_data['Close'].pct_change().shift(-1)  # Next day return
-            ticker_data['target_5d'] = ticker_data['Close'].pct_change(5).shift(-5)  # 5-day return
-            ticker_data['target_20d'] = ticker_data['Close'].pct_change(20).shift(-20)  # 20-day return
+            # 🔒 FIXED: Add 1-day buffer to prevent same-close signaling leakage
+            # Using shift(-(periods+1)) to create proper buffer
+            ticker_data['target_1d'] = ticker_data['Close'].pct_change(periods=1).shift(-2)  # 1-day return with +1 buffer
+            ticker_data['target_5d'] = ticker_data['Close'].pct_change(periods=5).shift(-6)  # 5-day return with +1 buffer  
+            ticker_data['target_20d'] = ticker_data['Close'].pct_change(periods=20).shift(-21)  # 20-day return with +1 buffer
             
             # QQQ-relative returns (alpha)
             # For simplicity, assume QQQ return is market average

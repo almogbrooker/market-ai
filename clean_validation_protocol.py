@@ -35,11 +35,16 @@ def step_1_rebuild_dataset_by_time_slice():
     logger.info("📊 STEP 1: REBUILD DATASET BY TIME SLICE")
     logger.info("=" * 60)
     
-    # Load enhanced dataset with fundamentals
+    # Load enhanced dataset with fundamentals - prioritize FIXED version
+    fixed_path = Path(__file__).parent / 'data' / 'training_data_enhanced_FIXED.csv'
     enhanced_path = Path(__file__).parent / 'data' / 'training_data_enhanced_with_fundamentals.csv'
     fallback_path = Path(__file__).parent / 'data' / 'training_data_enhanced.csv'
     
-    data_path = enhanced_path if enhanced_path.exists() else fallback_path
+    if fixed_path.exists():
+        data_path = fixed_path
+        logger.info("🔒 Using FIXED dataset with proper temporal buffers")
+    else:
+        data_path = enhanced_path if enhanced_path.exists() else fallback_path
     if not data_path.exists():
         logger.error(f"Dataset not found: {data_path}")
         return False
