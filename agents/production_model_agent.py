@@ -16,7 +16,9 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 from scipy.stats import spearmanr
 import warnings
-warnings.filterwarnings('ignore')
+
+# Only suppress non-critical warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
