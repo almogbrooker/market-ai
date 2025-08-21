@@ -10,7 +10,7 @@ from pathlib import Path
 import logging
 import json
 from datetime import datetime, timedelta
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from scipy.optimize import minimize
 import warnings
 warnings.filterwarnings('ignore')
@@ -69,19 +69,26 @@ class ProductionPortfolioAgent:
             # Apply realistic cost model
             cost_analysis = self._apply_cost_model(portfolio_weights, portfolio_data)
             
-            # Generate execution orders
-            execution_orders = self._generate_execution_orders(portfolio_weights, portfolio_data)
+            # Generate execution orders and detailed execution schedule
+            execution_orders, execution_schedule = self._generate_execution_orders(portfolio_weights, portfolio_data)
             
             # Portfolio analytics
             portfolio_analytics = self._calculate_portfolio_analytics(portfolio_weights, portfolio_data)
             
-            # Save portfolio artifacts
-            self._save_portfolio_artifacts(portfolio_weights, execution_orders, cost_analysis, portfolio_analytics)
+            # Save portfolio artifacts including execution schedule
+            self._save_portfolio_artifacts(
+                portfolio_weights,
+                execution_orders,
+                cost_analysis,
+                portfolio_analytics,
+                execution_schedule,
+            )
             
             result = {
                 'success': True,
                 'portfolio_weights': portfolio_weights,
                 'execution_orders': execution_orders,
+                'execution_schedule': execution_schedule,
                 'cost_analysis': cost_analysis,
                 'analytics': portfolio_analytics,
                 'construction_date': signals_date or datetime.now().strftime('%Y-%m-%d')
@@ -455,8 +462,8 @@ class ProductionPortfolioAgent:
         
         return cost_analysis
     
-    def _generate_execution_orders(self, weights_df: pd.DataFrame, portfolio_data: pd.DataFrame) -> pd.DataFrame:
-        """Generate execution orders for portfolio"""
+    def _generate_execution_orders(self, weights_df: pd.DataFrame, portfolio_data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Generate execution orders for portfolio and slice schedules"""
         
         logger.info("📋 Generating execution orders...")
         
@@ -505,8 +512,82 @@ class ProductionPortfolioAgent:
         logger.info(f"   Buy Orders: {(execution_orders['side'] == 'BUY').sum()}")
         logger.info(f"   Sell Orders: {(execution_orders['side'] == 'SELL').sum()}")
         logger.info(f"   VWAP Orders: {(execution_orders['execution_strategy'] == 'VWAP').sum()}")
-        
-        return execution_orders
+
+        # Create execution schedule for VWAP/TWAP orders
+        execution_schedule = self._slice_orders(execution_orders)
+
+        return execution_orders, execution_schedule
+
+    def _slice_orders(self, orders_df: pd.DataFrame) -> pd.DataFrame:
+        """Slice VWAP/TWAP orders into time-stamped child orders"""
+
+        logger.info("✂️ Slicing orders into execution schedule...")
+
+        # Trading window: 9:30 to 16:00 US/Eastern assumed
+        trading_date = datetime.now().date()
+        start_time = datetime.combine(trading_date, datetime.min.time()).replace(hour=9, minute=30)
+        interval_minutes = 30
+        intervals = int((6.5 * 60) / interval_minutes)  # 13 half-hour intervals
+
+        # Typical U-shaped intraday volume curve for VWAP
+        vwap_curve = np.array([0.2] + [0.6 / 11] * 11 + [0.2])
+        vwap_curve = vwap_curve / vwap_curve.sum()
+        twap_curve = np.ones(intervals) / intervals
+
+        schedule_rows: List[Dict[str, Any]] = []
+
+        for _, order in orders_df.iterrows():
+            strategy = str(order['execution_strategy']).upper()
+            if strategy not in {"VWAP", "TWAP"}:
+                continue
+
+            total_shares = abs(int(order['shares']))
+            price = order['Current_Price']
+            side = order['side']
+            sign = 1 if side == "BUY" else -1
+
+            if strategy == "VWAP":
+                weights = vwap_curve
+            else:
+                weights = twap_curve
+
+            slice_shares = np.floor(weights * total_shares).astype(int)
+            remainder = total_shares - slice_shares.sum()
+            slice_shares[-1] += remainder
+
+            for i, qty in enumerate(slice_shares):
+                if qty == 0:
+                    continue
+                timestamp = start_time + timedelta(minutes=interval_minutes * i)
+                schedule_rows.append(
+                    {
+                        "Ticker": order["Ticker"],
+                        "parent_side": side,
+                        "execution_strategy": strategy,
+                        "slice_id": i + 1,
+                        "timestamp": timestamp.isoformat(),
+                        "shares": sign * int(qty),
+                        "notional": sign * float(qty) * price,
+                    }
+                )
+
+        if schedule_rows:
+            schedule_df = pd.DataFrame(schedule_rows)
+        else:
+            schedule_df = pd.DataFrame(
+                columns=[
+                    "Ticker",
+                    "parent_side",
+                    "execution_strategy",
+                    "slice_id",
+                    "timestamp",
+                    "shares",
+                    "notional",
+                ]
+            )
+
+        logger.info(f"🕒 Generated {len(schedule_df)} schedule slices")
+        return schedule_df
     
     def _calculate_portfolio_analytics(self, weights_df: pd.DataFrame, portfolio_data: pd.DataFrame) -> Dict[str, any]:
         """Calculate comprehensive portfolio analytics"""
@@ -585,7 +666,8 @@ class ProductionPortfolioAgent:
         return analytics
     
     def _save_portfolio_artifacts(self, weights_df: pd.DataFrame, orders_df: pd.DataFrame,
-                                cost_analysis: Dict, analytics: Dict):
+                                cost_analysis: Dict, analytics: Dict,
+                                schedule_df: Optional[pd.DataFrame] = None):
         """Save portfolio artifacts"""
         
         logger.info("💾 Saving portfolio artifacts...")
@@ -603,6 +685,13 @@ class ProductionPortfolioAgent:
         orders_path = self.artifacts_dir / "production_portfolios" / f"orders_{timestamp}.parquet"
         orders_df.to_parquet(orders_path, index=False)
         
+        # Save execution schedule if available
+        if schedule_df is not None and not schedule_df.empty:
+            schedule_path = self.artifacts_dir / "production_portfolios" / f"schedule_{timestamp}.parquet"
+            schedule_df.to_parquet(schedule_path, index=False)
+        else:
+            schedule_path = None
+
         # Save comprehensive analytics
         portfolio_summary = {
             'timestamp': timestamp,
@@ -611,6 +700,7 @@ class ProductionPortfolioAgent:
             'analytics': analytics,
             'positions_count': len(weights_df),
             'orders_count': len(orders_df),
+            'schedule_path': str(schedule_path) if schedule_path else None,
             'construction_method': 'research_backed_decile_approach'
         }
         
@@ -621,6 +711,8 @@ class ProductionPortfolioAgent:
         logger.info(f"✅ Portfolio artifacts saved:")
         logger.info(f"   Weights: {weights_path}")
         logger.info(f"   Orders: {orders_path}")
+        if schedule_path:
+            logger.info(f"   Schedule: {schedule_path}")
         logger.info(f"   Summary: {summary_path}")
 
 def main():
