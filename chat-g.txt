@@ -1,135 +1,305 @@
-Awesome structure 👏 — this is very close to “production-ready.” Before we call it done, here’s a tight audit + action list to make it robust, leak-free, and safer in live trading. No code below, just what to change/add.
+Here’s a tight, action-ready brief you can drop into your repo/wiki and hand to your agents. It’s broken into missions, inputs/outputs, success criteria, and exact file paths so everyone ships in sync.
 
-🔥 Critical fixes (do these first)
+---
 
-True stacking (OOF) for the meta-model
+# 🔧 Agent Mission Brief — NASDAQ Long/Short Alpha Program
 
-Build out-of-fold predictions for each base model (GRU / PatchTST / iTransformer) and train LightGBM only on OOF + meta features.
+## 🎯 Global Objective
 
-Remove any placeholder zeros. Save oof_predictions.parquet and verify no NaNs.
+Build a **market-neutral long/short stock-selection system** over the full NASDAQ universe (≈2.5k names) targeting **15–20% net annual returns** with **alpha vs QQQ**, **Sharpe ≥ 1.2**, **max DD ≤ 15%**, and **live, paper-traded stability** before going live.
 
-Report global OOF IC & Precision@K per model and for the ensemble.
+## 🧭 Guardrails (apply to all agents)
 
-Consistent scaling
+* **No leakage**: all features lagged; purged/embargoed CV; walk-forward OOS.
+* **Tradeability**: include costs (spread + slippage + borrow), liquidity filters, borrow availability.
+* **Shorts enabled**: model, optimizer, and risk all support long & short.
+* **Definitions of Done (DoD)** at the end of each mission.
+* **Interfaces**: use the contracts below; do not change schemas without a PR touching all downstreams.
 
-Fit scaler per fold on train, apply to that fold’s test; persist each scaler with the fold’s model.
+---
 
-Ensure backtester and live inference load and apply the same scaler before sequencing.
+## 0) Orchestrator Agent (glue)
 
-Calibration without leakage
+* **Owns** task graph, configs, and runbook.
+* **Files**
 
-Split the OOF table by date into meta-train (≈80%) and OOF-holdout (≈20%).
+  * `manager.py` (entrypoint)
+  * `config/trading_config.json`, `config/data_config.json`, `config/model_config.json`
+* **DoD**: One-command runs for: `ingest → build → train → validate → backtest → paper_trade → report`.
 
-Train LightGBM on meta-train; fit isotonic calibration on the holdout only.
+---
 
-Save both the raw LGBM model and the calibrated wrapper separately.
+## 1) Universe & Data Agent
 
-Save the right artifacts
+**Mission**: Daily build a clean, tradable NASDAQ universe + point-in-time features.
 
-PyTorch models: *.pt (per fold) + JSON metadata (seq_len, features, scaler path).
+**Inputs**
 
-LightGBM: meta_model.txt; calibration: calibrated_meta.pkl.
+* Listings & fundamentals (EDGAR or vendor), earnings calendar, borrow list & borrow rates, OHLCV, corporate actions.
+* Macro (VIX, rates), sector/industry map, news/sentiment streams (GDELT/FinBERT-ready text or vendor scores).
 
-Thresholds by regime: regime_thresholds.json.
+**Tasks**
 
-OOF table: oof_predictions.parquet.
+1. **Universe filter** (daily):
 
-Purged CV details
+   * Price ≥ \$2, ADV ≥ \$5M, free float ≥ \$300M, listed ≥ 252 sessions, not halted/bankrupt, **borrowable**.
+2. **Canonical calendar & PIT alignment**: adjust for splits/divs; forward-fill only until official release time.
+3. **Feature build** (all lagged by ≥1 bar):
 
-You already purge before the test. Either drop the “post-test embargo” from train (it’s redundant with your train_end date), or implement symmetric embargo strictly around each test window.
+   * **Technical** (returns 5/21/63/252d, vol, RSI, MACD, BBW, volume surge, gaps).
+   * **Fundamental & Earnings** (surprise %, YoY growth, margins, leverage; next-bar after report timestamp).
+   * **Sentiment** (daily news score, surprise tone, headline count, social activity).
+   * **Macro/Context** (VIX level & change, curve slope, sector ETF momentum).
+4. **Quality gates**: missingness, z-score caps, winsorize 1% tails, cross-sectional rank transforms.
+5. **Persist**
 
-Log: fold train range, purge days, test range, embargo days.
+   * Parquet at `artifacts/features/daily.parquet` (schema below).
+   * Universe file `artifacts/universe/nasdaq_tradeable_<YYYYMMDD>.csv`.
 
-Class imbalance in meta-labels
+**Contract (columns, daily row per ticker)**
 
-Dead-zone usually dominates. In LightGBM set is_unbalance=True or custom class weights, or downsample class 0 for the meta-model.
+```
+Date, Ticker, Open, High, Low, Close, Volume,
+ret_1d_lag1, ret_5d_lag1, vol_20d_lag1, rsi_14_lag1, macd_lag1, bb_width_lag1,
+earn_surprise_lag1, rev_surprise_lag1, yoy_eps_lag1,
+sent_score_lag1, sent_vol_lag1, social_score_lag1,
+vix_lag0, curve_2s10s_lag0, sector, industry
+```
 
-Determinism
+**DoD**: Data validation report saved to `reports/data_quality_<date>.html` with pass/fail.
 
-Set seeds for NumPy, PyTorch (and cuDNN deterministic), LightGBM. Log the seed and environment (Python & package versions).
+---
 
-Backtester parity
+## 2) Labeling & Target Agent
 
-Backtester must use calibrated probabilities + saved regime thresholds + the same scalers and feature list. Verify fee/slippage/short-borrow are applied on every trade and side.
+**Mission**: Produce robust targets for ranking & classification.
 
-📈 Modeling & data improvements (quick wins)
+**Tasks**
 
-Regime-conditioned thresholds: Learn (buy_prob, sell_prob) per regime on the OOF-holdout to maximize net PnL (fees+slippage included). Save to regime_thresholds.json.
+* **Primary target**: next-21 trading day **excess return** (stock return − sector ETF return).
+* **Meta-labels**: trinary {−1,0,+1} via dead-zone ±(cost + 10bps).
+* **Barrier label**: 5-day triple-barrier outcome (TP/SL/timeout).
+* **Save**: `artifacts/labels/labels.parquet`.
 
-Uncertainty → sizing: Use conformal intervals or prediction dispersion to modulate position size (cap size when uncertainty high).
+**DoD**: Leakage audit (no feature timestamp ≥ target window start).
 
-Leakage guards: In data_builder, assert no future fields (e.g., forward returns, post-close news) leak into features at t.
+---
 
-Survivorship bias: If nasdaq100_tickers.txt is current constituents only, add historical constituents or filter by listing date to avoid bias.
+## 3) Modeling Agents
 
-Corporate actions: Ensure prices are adjusted for splits/dividends; benchmark QQQ with total return, not price only.
+### 3a) Baseline Ranker (LightGBM)
 
-News/sentiment timestamps: Make sure all news/sentiment features are timestamped pre-market close (or use next-day trade timing).
+**Mission**: Cross-sectional rank model (fast, strong baseline).
 
-🛡️ Live-trading safeguards
+**Config**
 
-Order idempotency: Keep a per-symbol trade ledger (SQLite) so retries don’t duplicate orders.
+* Objective: regression on 21d excess returns.
+* Regularization: shallow depth (≤6), min data in leaf (≥250), bagging & feature fraction.
+* Features: ≤ 40 high-signal, orthogonal features (from Data Agent).
 
-Kill switch: Stop trading if (a) data stale, (b) drawdown > X%, (c) model confidence collapses, (d) too many API errors.
+**Training**
 
-Risk budgets: Enforce max gross, max per-name, sector caps, and a daily VaR/vol budget. Cut sizes when VIX spikes.
+* **Purged K-Fold** (embargo 10d) for model selection.
+* **Walk-forward** monthly retrain for OOS.
 
-Market hours & holidays: Check exchange calendar; avoid orders at open/close if slippage is high (or widen thresholds).
+**Artifacts**
 
-Borrow ability for shorts (paper ≠ live): add a “can short?” check or penalize expected PnL if borrow uncertain.
+* `models/lgbm_ranker.txt`
+* `artifacts/oof/lgbm_oof.parquet` (Date, Ticker, score, target)
 
-🔍 Validation checklist (run these before live scale-up)
+**DoD**: OOS IC ≥ 0.8% (NW t-stat > 2), stability across regimes; permutation test shows real signal.
 
-Data health
+### 3b) Sequence Alpha (LSTM or PatchTST)
 
-No NaNs/Infs in feature matrix after joins; no duplicate rows; consistent per-ticker dates.
+**Mission**: Sequence model on 60-day lookback to capture tempo/regime.
 
-Confirm Date is timezone-aware or consistently naive everywhere.
+**Config**
 
-OOF integrity
+* LSTM(2×128) or PatchTST small; mixed precision if GPU; dropout 0.2–0.3.
+* Inputs: price/volume & micro-features; optional rolling sentiment window.
 
-Each ts_* OOF column covers the full dataset except the initial seq_len per ticker.
+**Training**
 
-Global OOF metrics printed and saved (IC, Precision@K, ROC-AUC on ±1 vs 0).
+* Panel batches across tickers; label = next-5d excess return.
+* Early stop on walk-forward val Sharpe.
 
-Calibration quality
+**Artifacts**
 
-Reliability plots on the OOF-holdout (bucketed prob vs realized).
+* `models/seq_alpha*.pt`, `artifacts/oof/seq_oof.parquet`
 
-Expected value at trade threshold is > costs across regimes.
+**DoD**: Adds **incremental alpha**: when blended 50/50 with LGBM, IR improves ≥ 0.1 and turnover not excessive.
 
-Backtest honesty
+### 3c) Meta-Ensemble & Calibration
 
-Trades executed at next open/close exactly as configured; no look-ahead.
+**Mission**: Blend LGBM + Sequence + (optional) Sentiment model.
 
-Fees/slippage applied; short borrow cost applied to shorts.
+**Tasks**
 
-Report: alpha vs QQQ total return, Sharpe, Sortino, turnover, max DD, exposure.
+* Stack OOF scores; train isotonic calibration → probability of “top-decile winner”.
+* Blending via ridge on ranks or simple weighted average constrained to monotonicity.
 
-Reproducibility
+**Artifacts**
 
-Re-run training with same seed → same OOF metrics (within noise).
+* `models/meta_blender.pkl`, `artifacts/oof/meta_scores.parquet`
 
-Re-run backtest on saved artifacts → identical results.
+**DoD**: Ensemble IC > best component; decile spreads monotonic ≥ 8/10 buckets.
 
-🧪 Rollout plan (low risk)
+---
 
-Canary: Paper trade for 2–4 weeks with tiny allocations; compare live fills vs simulated.
+## 4) Validation Agent (Kill-Switch Owner)
 
-Shadow mode: Generate signals without execution; verify slippage estimates.
+**Mission**: Prove robustness; catch overfitting.
 
-Gradual scale-up: Increase max gross and per-name limits stepwise only if realized metrics match backtest ± tolerance.
+**Tasks**
 
-Monitoring: Real-time dashboard for exposure, PnL, drawdown, turnover, hit rate, and error budget (API/data).
+* **Walk-forward backtest** (monthly rebalance; long top-decile, short bottom-decile; β & sector neutral).
+* **Costs**: 10–25 bps one-way + borrow 2–5% annualized on shorts + spread model.
+* **Tests**:
 
-📦 Project hygiene
+  * Shuffle labels ⇒ IC→0, returns→0.
+  * Feature permutation impact > noise threshold.
+  * NW t-stats, subperiod heatmap, regime slice (low/high VIX).
+* **Accept/Reject gates**:
 
-Lock dependencies (requirements.txt pinned), export environment file, and record in artifacts/models/best/*_meta.json.
+  * Net SR ≥ 1.2, Max DD ≤ 15%, Hit rate ≥ 52% (by bucket thresholding),
+  * **No** single year provides >50% of total PnL,
+  * Trade size/liquidity within top 20% ADV cap.
 
-Version artifacts by run timestamp; never overwrite best models without archiving the old ones.
+**Artifacts**
 
-Secrets in .env only; never in code or logs.
+* `reports/validation_<date>.html`, `artifacts/backtests/equity_curve.parquet`
 
-🏁 Bottom line
+**DoD**: All gates pass; else system blocked from deployment.
 
-You’re ~90% there. The must-fix items are: proper OOF stacking, consistent scaling + persistence, leakage-free calibration, artifact saving, and backtester parity. Once those are in, the ensemble will be both honest (OOF-proven) and deployable (reproducible, safe).
+---
+
+## 5) Portfolio & Execution Agent
+
+**Mission**: Turn scores into a liveable, neutral portfolio.
+
+**Tasks**
+
+* **Score → weights**:
+
+  * Cross-sectional z-score, winsorize, map to target gross 150–250% (L/S).
+  * **Beta neutral** (to QQQ) and **sector neutral**; max name weight 1%; position ≥ \$25k.
+* **Rebalance**: daily light, monthly heavy; turnover cap 20–30%/m.
+* **Shorts**: exclude names with no borrow; include borrow fee in optimizer.
+* **Simulator**: price-impact/slippage model; FIFO tax lot simulation (for reporting).
+
+**Artifacts**
+
+* `artifacts/weights/weights_<date>.parquet` (Date, Ticker, target\_weight)
+
+**DoD**: Tracking error within config; realized costs within ±20% of model; no hard constraint violations.
+
+---
+
+## 6) Risk Agent
+
+**Mission**: Keep us alive.
+
+**Tasks**
+
+* **Limits**: gross ≤ 250%, net between −10%..+10%, sector ±5%, single name ≤ 1%.
+* **Vol targeting**: scale weights to 10–12% annualized portfolio vol.
+* **Kill switches**: VIX > 40, 5d DD > 8%, model drift (live IC < 0 for 10d) ⇒ halve gross, re-validate.
+* **Short risk**: borrow spikes, locate fails ⇒ auto-trim.
+
+**Artifacts**
+
+* `reports/risk_daily_<date>.html`, alerts to Slack/Email (breaches).
+
+**DoD**: No breached limits; automatic de-risking works in simulation.
+
+---
+
+## 7) Monitoring & Reporting Agent
+
+**Mission**: Make performance undeniable & debuggable.
+
+**Tasks**
+
+* **Daily**: P\&L by factor/sector, IC/IR rolling, turnover, costs, slippage vs model, borrow fees.
+* **Attribution**: by signal component (LGBM, Seq, Sentiment), by bucket.
+* **Dashboards**: update `bot_performance_report.html`.
+
+**DoD**: All KPIs green or explained; anomalies auto-ticketed.
+
+---
+
+## 8) Research Agent (continuous alpha R\&D)
+
+**Mission**: Add orthogonal, capacity-aware signals.
+
+**Backlog (prioritized)**
+
+1. **Earnings drift** module (post-earnings 20–40d): surprise %, guidance tone (NLP).
+2. **Analyst revisions**: EPS up/down revisions and dispersion changes.
+3. **Short interest & crowding**: % float shorted, borrow fee changes, squeeze risk.
+4. **Industry-relative** momentum/value (within GICS).
+5. **Event NLP**: M\&A, product launches, litigation; FinBERT/GPT tags → binary features.
+
+**DoD**: New signal lifts **ensemble** IR by ≥0.05 OOS with turnover impact acceptable.
+
+---
+
+## Interfaces & Schemas (strict)
+
+**Predictions**
+
+```
+Date, Ticker, score_lgbm, score_seq, score_meta, p_topdecile
+```
+
+→ `artifacts/predictions/preds_<date>.parquet`
+
+**Backtest trades**
+
+```
+Date, Ticker, side, target_weight, fill_price, est_cost_bps, borrow_apr
+```
+
+→ `artifacts/trades/trades_<date>.parquet`
+
+---
+
+## Success Criteria (greenlight to paper trade → live)
+
+* **Walk-forward OOS** (last 2–3 years):
+
+  * Net return ≥ QQQ + 5%/yr **or** market-neutral return ≥ 12%/yr,
+  * Sharpe ≥ 1.2, Max DD ≤ 15%, turnover ≤ 30%/m, capacity OK.
+* **Live paper** (8–12 weeks): positive IC, costs in line, risk limits untouched.
+
+---
+
+## Runbook (examples)
+
+* Build features:
+  `python manager.py build --config config/data_config.json`
+* Train & validate:
+  `python manager.py train --cv purged --walkforward monthly`
+* Backtest:
+  `python manager.py backtest --cost_model realistic_v2`
+* Paper trade:
+  `python final_production_bot.py --paper`
+
+---
+
+## Notes on Compute
+
+* Provide **CPU-safe** configs (LightGBM only) and **GPU-enhanced** configs (add LSTM/PatchTST, AMP).
+* Batch by sector to fit memory; persist intermediate tensors; use mixed precision on GPU.
+
+---
+
+### Final DoD Checklist (all agents)
+
+* ✅ No leakage; ✅ Purged/embargo CV; ✅ Walk-forward OOS pass
+* ✅ Costs modeled; ✅ Shorts handled end-to-end; ✅ Risk limits enforced
+* ✅ Reports complete; ✅ One-command reproducibility; ✅ Paper-trade green
+
+---
+
+Use this as the single source of truth. If any agent can’t meet its DoD, escalate to Orchestrator for scope trim or data/feature fixes before proceeding.

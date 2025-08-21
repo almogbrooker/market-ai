@@ -1,0 +1,146 @@
+{
+  "baseline_ranker": {
+    "model_type": "lightgbm",
+    "objective": "regression",
+    "target": "excess_return_21d",
+    "max_features": 40,
+    "regularization": {
+      "max_depth": 6,
+      "min_data_in_leaf": 250,
+      "feature_fraction": 0.7,
+      "bagging_fraction": 0.8,
+      "bagging_freq": 5,
+      "lambda_l1": 0.1,
+      "lambda_l2": 0.1
+    },
+    "cross_validation": {
+      "method": "purged_kfold",
+      "n_splits": 5,
+      "embargo_days": 10,
+      "purge_days": 5
+    },
+    "walk_forward": {
+      "retrain_frequency": "monthly",
+      "min_train_days": 252
+    },
+    "success_criteria": {
+      "min_oos_ic": 0.008,
+      "min_newey_west_tstat": 2.0,
+      "stability_across_regimes": true,
+      "permutation_test_required": true
+    },
+    "artifacts": {
+      "model_path": "models/lgbm_ranker.txt",
+      "oof_path": "artifacts/oof/lgbm_oof.parquet"
+    }
+  },
+  
+  "sequence_alpha": {
+    "model_type": "lstm",
+    "alternative_model": "patchtst",
+    "sequence_length": 60,
+    "architecture": {
+      "lstm": {
+        "layers": 2,
+        "hidden_size": 128,
+        "dropout": 0.25,
+        "bidirectional": false
+      },
+      "patchtst": {
+        "patch_len": 16,
+        "stride": 8,
+        "d_model": 128,
+        "n_heads": 8,
+        "num_layers": 4
+      }
+    },
+    "training": {
+      "batch_size": 64,
+      "learning_rate": 0.001,
+      "max_epochs": 100,
+      "early_stopping_patience": 15,
+      "mixed_precision": true,
+      "target": "5d_excess_returns"
+    },
+    "features": {
+      "price_volume": true,
+      "technical_indicators": true,
+      "rolling_sentiment": true,
+      "macro_context": true
+    },
+    "success_criteria": {
+      "incremental_alpha": 0.1,
+      "blend_ratio": 0.5,
+      "max_turnover_increase": 0.05
+    },
+    "artifacts": {
+      "model_path": "models/seq_alpha.pt",
+      "oof_path": "artifacts/oof/seq_oof.parquet"
+    }
+  },
+  
+  "meta_ensemble": {
+    "components": ["lgbm", "sequence", "sentiment"],
+    "blending_method": "ridge_on_ranks",
+    "calibration": {
+      "method": "isotonic",
+      "target": "top_decile_probability"
+    },
+    "constraints": {
+      "monotonicity_required": true,
+      "min_component_weight": 0.1,
+      "max_component_weight": 0.7
+    },
+    "success_criteria": {
+      "ensemble_ic_improvement": true,
+      "decile_spread_monotonicity": 0.8,
+      "min_decile_buckets_monotonic": 8
+    },
+    "artifacts": {
+      "blender_path": "models/meta_blender.pkl",
+      "scores_path": "artifacts/oof/meta_scores.parquet"
+    }
+  },
+  
+  "research_pipeline": {
+    "earnings_drift": {
+      "post_earnings_window": [20, 40],
+      "surprise_threshold": 0.05,
+      "guidance_nlp": true
+    },
+    "analyst_revisions": {
+      "eps_revision_tracking": true,
+      "dispersion_changes": true,
+      "consensus_momentum": true
+    },
+    "short_interest": {
+      "float_shorted_pct": true,
+      "borrow_fee_changes": true,
+      "squeeze_risk_scoring": true
+    },
+    "industry_relative": {
+      "gics_normalization": true,
+      "momentum_value_within_sector": true
+    },
+    "event_nlp": {
+      "ma_detection": true,
+      "product_launches": true,
+      "litigation_tracking": true,
+      "finbert_tags": true,
+      "gpt_classification": false
+    }
+  },
+  
+  "computation": {
+    "cpu_safe_config": {
+      "use_lightgbm_only": true,
+      "disable_gpu_models": true
+    },
+    "gpu_enhanced_config": {
+      "enable_lstm_patchtst": true,
+      "use_mixed_precision": true,
+      "batch_by_sector": true,
+      "persist_intermediate_tensors": true
+    }
+  }
+}

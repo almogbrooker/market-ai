@@ -1,0 +1,33 @@
+{
+  "dataset_hash": "dc709706",
+  "build_config": {
+    "start_date": "2018-01-01",
+    "end_date": "2025-08-21",
+    "universe_filters": {
+      "min_price": 3.0,
+      "min_adv": 2000000.0,
+      "max_adv_usage": 0.05
+    }
+  },
+  "statistics": {
+    "total_samples": 112623,
+    "unique_tickers": 66,
+    "date_range": [
+      "2018-06-21 00:00:00",
+      "2025-08-19 00:00:00"
+    ],
+    "features": [
+      "return_5d_lag1",
+      "return_20d_lag1",
+      "return_60d_lag1",
+      "return_12m_ex_1m_lag1",
+      "vol_20d_lag1",
+      "vol_60d_lag1",
+      "volume_ratio_lag1",
+      "dollar_volume_ratio_lag1",
+      "log_price_lag1",
+      "price_volume_trend_lag1"
+    ]
+  },
+  "timestamp": "2025-08-21T07:29:42.396970"
+}

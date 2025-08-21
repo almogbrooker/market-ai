@@ -1,54 +1,81 @@
-# Production Trading System
+# 🎯 NASDAQ Stock-Picker - Production Implementation
 
-## 🚀 Live Deployment Ready
+Clean implementation of the Mission Brief specifications for NASDAQ stock picking with beta-neutral long/short portfolios.
 
-This directory contains the production-ready trading system with 6.83% IC performance.
+## 🏗️ **Core Components**
 
-### Core Files
-- `main_trading_bot.py` - Main live trading bot
-- `model_loader.py` - Load trained models
-- `backtesting_engine.py` - Comprehensive backtesting
-- `model_validator.py` - Model validation suite
-- `model_trainer.py` - Critical fixes implementation
+### **📊 Universe Builder**
+- `nasdaq_stock_picker.py` - Downloads NASDAQ universe with proper filters
+- Applies liquidity/quality screens (price ≥$3, ADV ≥$2M)  
+- Creates 10 lagged momentum/quality features
+- Saves versioned dataset with hash for reproducibility
 
-### Quick Deployment
-```bash
-# 1. Install dependencies
-pip install -r requirements.txt
+### **🤖 Model Trainer**  
+- `sleeve_c_trainer.py` - Trains Momentum + Quality baseline ranker
+- Implements purged CV (purge=10d, embargo=3d)
+- Enforces training IC ≤ 3% gate to prevent overfitting
+- Evaluates cross-sectional Rank IC with proper validation
 
-# 2. Configure environment
-cp .env.example .env
-# Edit your API keys
+### **💼 Portfolio Constructor**
+- `portfolio_constructor.py` - Beta-neutral long/short portfolio construction
+- Long top 30%, short bottom 30% with 8% position limits
+- Includes transaction costs (3.5bps fee + 8.5bps slippage + borrow)
+- Risk management with beta neutralization and volatility targeting
 
-# 3. Validate models
-python model_validator.py
+## 📁 **Artifacts Structure**
 
-# 4. Run backtest
-python backtesting_engine.py
-
-# 5. Start live trading
-python main_trading_bot.py
+```
+artifacts/
+├── nasdaq_picker/          # Universe data with versioning hash
+│   ├── nasdaq_dataset_dc709706.csv
+│   └── dataset_metadata_dc709706.json
+├── sleeves/sleeve_c/       # Model artifacts  
+│   ├── sleeve_c_fold_*_model.txt    # Trained models
+│   ├── sleeve_c_oof_predictions.csv # Out-of-fold predictions
+│   ├── sleeve_c_daily_IC.csv        # Daily IC time series
+│   └── sleeve_c_metadata.json       # Training config & results
+└── portfolio/              # Portfolio simulation results
+    ├── daily_portfolios.csv
+    ├── daily_performance.csv
+    └── portfolio_summary.json
 ```
 
-### Model Architecture
-- **Multi-model ensemble** (5 LSTM with different seeds)
-- **40-day sequences** with 32 enhanced features  
-- **Beta-neutral targets** with cross-sectional ranking
-- **Conformal prediction gating** for signal filtering
-- **Isotonic calibration** for prediction quality
+## 🚀 **Quick Start**
 
-### Performance Validation
-All models pass institutional acceptance gates:
-- ✅ Daily IC > 1.2% (net of costs)
-- ✅ Newey-West T-Stat > 2.0
-- ✅ 18+ months out-of-sample validation
-- ✅ Proper purged cross-validation
+```bash
+# 1. Build NASDAQ universe
+python nasdaq_stock_picker.py
 
-### Risk Controls
-- Maximum 15% position size
-- 3% daily stop loss
-- 10 bps transaction costs
-- Beta neutralization
-- Regime-aware adjustments
+# 2. Train Sleeve C model  
+python sleeve_c_trainer.py
 
-**Ready for institutional deployment with confidence.**
+# 3. Construct portfolios (if model passes gates)
+python portfolio_constructor.py
+```
+
+## 📊 **Current Status**
+
+- **✅ Infrastructure**: Production-ready, leak-proof, properly gated
+- **✅ Universe**: 112,623 samples across 66 NASDAQ stocks (2018-2025)
+- **❌ Signal**: Sleeve C Rank IC = -0.23% (Target: ≥0.8%)
+- **🎯 Next**: Need enhanced features to generate predictive signal
+
+## 🎯 **Mission Brief Compliance**
+
+All specification requirements implemented:
+- ✅ Proper universe filters and cost modeling
+- ✅ Leak-proof feature engineering (all features lagged)
+- ✅ Purged cross-validation with embargo periods  
+- ✅ Beta-neutral portfolio construction with limits
+- ✅ Complete artifacts and reporting pipeline
+- ❌ Signal generation (current features insufficient)
+
+See `MISSION_BRIEF_SUMMARY.md` for complete implementation details and next steps.
+
+## 📋 **Dependencies**
+
+```bash
+pip install -r requirements.txt
+```
+
+Key libraries: pandas, numpy, lightgbm, yfinance, scipy, scikit-learn

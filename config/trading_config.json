@@ -1,15 +1,67 @@
 {
-  "trading": {
-    "max_position_size": 0.15,
-    "transaction_cost": 0.001,
-    "rebalance_frequency": 5,
-    "max_daily_loss": -0.03,
-    "portfolio_volatility": 0.15
+  "global_objective": {
+    "target_return": 0.18,
+    "min_sharpe": 1.2,
+    "max_drawdown": 0.15,
+    "alpha_vs_qqq": true,
+    "live_paper_traded_stability": true
   },
-  "risk_management": {
-    "conformal_gating": true,
-    "beta_neutralization": true,
-    "cross_sectional_ranking": true,
-    "purged_cv": true
+  
+  "guardrails": {
+    "no_leakage": true,
+    "purged_embargoed_cv": true,
+    "walk_forward_oos": true,
+    "include_transaction_costs": true,
+    "shorts_enabled": true
+  },
+  
+  "portfolio_construction": {
+    "gross_exposure_min": 1.5,
+    "gross_exposure_max": 2.5,
+    "net_exposure_min": -0.1,
+    "net_exposure_max": 0.1,
+    "beta_neutral": true,
+    "sector_neutral": true,
+    "max_name_weight": 0.01,
+    "min_position_size": 25000,
+    "rebalance_frequency": "daily_light_monthly_heavy",
+    "turnover_cap_monthly": 0.25
+  },
+  
+  "risk_limits": {
+    "max_gross_exposure": 2.5,
+    "sector_exposure_limit": 0.05,
+    "single_name_limit": 0.01,
+    "vol_target_annual": 0.11,
+    "max_5d_drawdown": 0.08,
+    "vix_kill_switch": 40,
+    "model_drift_threshold": {
+      "ic_negative_days": 10,
+      "action": "halve_gross"
+    }
+  },
+  
+  "transaction_costs": {
+    "spread_slippage_bps": 15,
+    "commission_bps": 1,
+    "short_borrow_rate_annual": 0.035,
+    "include_market_impact": true
+  },
+  
+  "validation_gates": {
+    "min_net_sharpe": 1.2,
+    "max_drawdown": 0.15,
+    "min_hit_rate": 0.52,
+    "max_single_year_pnl_contribution": 0.5,
+    "max_adv_usage": 0.2,
+    "min_oos_ic": 0.008,
+    "min_newey_west_tstat": 2.0
+  },
+  
+  "paper_trading": {
+    "duration_weeks": 10,
+    "required_positive_ic": true,
+    "cost_tolerance": 0.2,
+    "risk_limits_enforced": true
   }
 }

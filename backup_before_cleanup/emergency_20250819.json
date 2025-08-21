@@ -1,7 +1,0 @@
-[
-  {
-    "timestamp": "2025-08-19T19:02:35.458368",
-    "error": "'list' object has no attribute 'items'",
-    "action": "emergency_stop"
-  }
-]
