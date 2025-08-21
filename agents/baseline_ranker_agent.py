@@ -15,6 +15,7 @@ from typing import Dict, List, Tuple, Optional
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import TimeSeriesSplit
 from scipy.stats import spearmanr
+from sklearn.metrics import ndcg_score
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -93,16 +94,18 @@ class BaselineRankerAgent:
         
         # Load labeled data
         self.labels_path = self.artifacts_dir / "labels" / "labels.parquet"
-        
+
         # Success criteria from config
         self.min_oos_ic = self.config['success_criteria']['min_oos_ic']
         self.min_newey_west_tstat = self.config['success_criteria']['min_newey_west_tstat']
+        self.overfit_cap = self.config.get('overfit_cap', 0.03)
         
         logger.info(f"🎯 Success Criteria:")
         logger.info(f"   Min OOS IC: {self.min_oos_ic:.3f} ({self.min_oos_ic*100:.1f}%)")
         logger.info(f"   Min Newey-West t-stat: {self.min_newey_west_tstat}")
         logger.info(f"   Target: {self.config['target']}")
         logger.info(f"   Max Features: {self.config['max_features']}")
+        logger.info(f"   Overfit Cap: {self.overfit_cap:.3f}")
     
     def train_model(self) -> bool:
         """
@@ -230,45 +233,57 @@ class BaselineRankerAgent:
         
         for fold_id, (train_idx, val_idx) in enumerate(purged_cv.split(X, y, dates)):
             logger.info(f"🔥 Training fold {fold_id + 1}/{self.config['cross_validation']['n_splits']}")
-            
-            X_train, X_val = X[train_idx], X[val_idx]
-            y_train, y_val = y[train_idx], y[val_idx]
-            
+
+            train_df = df.iloc[train_idx].sort_values('Date')
+            val_df = df.iloc[val_idx].sort_values('Date')
+
+            X_train = train_df[feature_columns].values
+            y_train = train_df[self.config['target']].values
+            train_dates = train_df['Date'].values
+
+            X_val = val_df[feature_columns].values
+            y_val = val_df[self.config['target']].values
+            val_dates = val_df['Date'].values
+
             # Per-fold scaling
             scaler = StandardScaler()
             X_train_scaled = scaler.fit_transform(X_train)
             X_val_scaled = scaler.transform(X_val)
-            
+
             # Train LightGBM
-            model = self._train_lgbm(X_train_scaled, y_train, X_val_scaled, y_val)
+            model = self._train_lgbm(X_train_scaled, y_train, train_dates, X_val_scaled, y_val, val_dates)
             
             # Predictions
             val_preds = model.predict(X_val_scaled)
             oof_predictions[val_idx] = val_preds
             oof_mask[val_idx] = True
-            
-            # Calculate fold IC
+
+            # Calculate fold metrics
             fold_ic = spearmanr(y_val, val_preds)[0]
             fold_ic = 0 if np.isnan(fold_ic) else fold_ic
-            
+            fold_ndcg = ndcg_score([y_val], [val_preds])
+
             fold_results.append({
                 'fold': fold_id,
                 'ic': fold_ic,
+                'ndcg': fold_ndcg,
                 'samples': len(y_val),
                 'train_samples': len(y_train)
             })
-            
-            logger.info(f"   Fold {fold_id + 1} IC: {fold_ic:.4f} ({fold_ic*100:.2f}%)")
-        
-        # Overall OOF IC
+
+            logger.info(f"   Fold {fold_id + 1} IC: {fold_ic:.4f} ({fold_ic*100:.2f}%), NDCG: {fold_ndcg:.4f}")
+
+        # Overall OOF metrics
         oof_ic = spearmanr(y[oof_mask], oof_predictions[oof_mask])[0]
         oof_ic = 0 if np.isnan(oof_ic) else oof_ic
-        
+        oof_ndcg = ndcg_score([y[oof_mask]], [oof_predictions[oof_mask]])
+
         # Newey-West t-statistic
         nw_tstat = self._calculate_newey_west_tstat(oof_predictions[oof_mask], y[oof_mask])
         
         cv_results = {
             'oof_ic': oof_ic,
+            'oof_ndcg': oof_ndcg,
             'newey_west_tstat': nw_tstat,
             'fold_results': fold_results,
             'oof_predictions': oof_predictions,
@@ -277,6 +292,7 @@ class BaselineRankerAgent:
         
         logger.info(f"✅ Purged CV Results:")
         logger.info(f"   OOF IC: {oof_ic:.4f} ({oof_ic*100:.2f}%)")
+        logger.info(f"   OOF NDCG: {oof_ndcg:.4f}")
         logger.info(f"   Newey-West t-stat: {nw_tstat:.2f}")
         
         return cv_results
@@ -289,89 +305,112 @@ class BaselineRankerAgent:
         
         logger.info("🚶 Running walk-forward validation...")
         
-        # Get monthly rebalance dates
+        df = df.sort_values('Date')
         df['YearMonth'] = df['Date'].dt.to_period('M')
-        rebalance_dates = sorted(df['YearMonth'].unique())
-        
+        months = sorted(df['YearMonth'].unique())
+
         walkforward_results = []
-        min_train_periods = 12  # 12 months minimum training
-        
-        for i, test_period in enumerate(rebalance_dates[min_train_periods:], min_train_periods):
-            # Training data: all data before test period
-            train_data = df[df['YearMonth'] < test_period].copy()
-            test_data = df[df['YearMonth'] == test_period].copy()
-            
+        train_months = 24
+        purge_days = 10
+        embargo_days = 5
+
+        for i in range(train_months, len(months)):
+            test_period = months[i]
+            test_start = test_period.to_timestamp()
+            test_end = (test_period + 1).to_timestamp() - timedelta(days=1)
+
+            train_start = test_start - pd.DateOffset(months=train_months)
+            train_end = test_start - timedelta(days=purge_days + embargo_days)
+
+            train_mask = (df['Date'] >= train_start) & (df['Date'] <= train_end)
+            test_mask = (df['Date'] >= test_start) & (df['Date'] <= test_end)
+
+            train_data = df.loc[train_mask]
+            test_data = df.loc[test_mask]
+
             if len(train_data) < 1000 or len(test_data) < 10:
                 continue
-            
-            # Prepare data
+
             X_train = train_data[feature_columns].values
             y_train = train_data[self.config['target']].values
+            train_dates = train_data['Date'].values
+
             X_test = test_data[feature_columns].values
             y_test = test_data[self.config['target']].values
-            
-            # Scale
+
             scaler = StandardScaler()
             X_train_scaled = scaler.fit_transform(X_train)
             X_test_scaled = scaler.transform(X_test)
-            
-            # Train model
-            model = self._train_lgbm(X_train_scaled, y_train)
-            
-            # Predict
+
+            model = self._train_lgbm(X_train_scaled, y_train, train_dates)
+
             test_preds = model.predict(X_test_scaled)
-            
-            # Calculate IC
+
             test_ic = spearmanr(y_test, test_preds)[0]
             test_ic = 0 if np.isnan(test_ic) else test_ic
-            
+            test_ndcg = ndcg_score([y_test], [test_preds])
+
             walkforward_results.append({
                 'period': str(test_period),
                 'ic': test_ic,
+                'ndcg': test_ndcg,
                 'samples': len(y_test),
                 'train_samples': len(y_train)
             })
-            
-            if i % 6 == 0:  # Log every 6 months
-                logger.info(f"   {test_period}: IC = {test_ic:.4f}")
-        
-        # Calculate statistics
+
+            if (i - train_months) % 6 == 0:
+                logger.info(f"   {test_period}: IC={test_ic:.4f}, NDCG={test_ndcg:.4f}")
+
         ics = [r['ic'] for r in walkforward_results]
+        ndcgs = [r['ndcg'] for r in walkforward_results]
         wf_mean_ic = np.mean(ics)
         wf_std_ic = np.std(ics)
         wf_sharpe = wf_mean_ic / wf_std_ic if wf_std_ic > 0 else 0
-        
+        wf_mean_ndcg = np.mean(ndcgs) if ndcgs else 0
+
         wf_summary = {
             'mean_ic': wf_mean_ic,
             'std_ic': wf_std_ic,
             'ic_sharpe': wf_sharpe,
+            'mean_ndcg': wf_mean_ndcg,
             'periods': len(walkforward_results),
             'results': walkforward_results
         }
-        
+
         logger.info(f"✅ Walk-Forward Results:")
         logger.info(f"   Mean IC: {wf_mean_ic:.4f} ({wf_mean_ic*100:.2f}%)")
+        logger.info(f"   Mean NDCG: {wf_mean_ndcg:.4f}")
         logger.info(f"   IC Sharpe: {wf_sharpe:.2f}")
         logger.info(f"   Periods: {len(walkforward_results)}")
-        
+
         return wf_summary
     
-    def _train_lgbm(self, X_train: np.ndarray, y_train: np.ndarray, 
-                    X_val: Optional[np.ndarray] = None, y_val: Optional[np.ndarray] = None) -> lgb.Booster:
+    def _train_lgbm(self, X_train: np.ndarray, y_train: np.ndarray, train_dates: np.ndarray,
+                    X_val: Optional[np.ndarray] = None, y_val: Optional[np.ndarray] = None,
+                    val_dates: Optional[np.ndarray] = None) -> lgb.Booster:
         """Train LightGBM with regularization"""
-        
-        # Create datasets
-        train_data = lgb.Dataset(X_train, label=y_train)
-        
+
+        # Sort by date to align groups
+        train_order = np.argsort(train_dates)
+        X_train = X_train[train_order]
+        y_train = y_train[train_order]
+        train_dates = train_dates[train_order]
+        _, train_group = np.unique(train_dates, return_counts=True)
+        train_data = lgb.Dataset(X_train, label=y_train, group=train_group.tolist())
+
         valid_sets = [train_data]
-        if X_val is not None and y_val is not None:
-            val_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
+        if X_val is not None and y_val is not None and val_dates is not None:
+            val_order = np.argsort(val_dates)
+            X_val = X_val[val_order]
+            y_val = y_val[val_order]
+            val_dates = val_dates[val_order]
+            _, val_group = np.unique(val_dates, return_counts=True)
+            val_data = lgb.Dataset(X_val, label=y_val, group=val_group.tolist(), reference=train_data)
             valid_sets.append(val_data)
-        
-        # Parameters from config with heavy regularization
+
         params = {
-            'objective': 'regression',
-            'metric': 'rmse',
+            'objective': 'lambdarank',
+            'metric': 'ndcg',
             'boosting_type': 'gbdt',
             'max_depth': self.config['regularization']['max_depth'],
             'min_data_in_leaf': self.config['regularization']['min_data_in_leaf'],
@@ -384,18 +423,18 @@ class BaselineRankerAgent:
             'num_leaves': 31,
             'verbose': -1,
             'random_state': 42,
-            'force_col_wise': True
+            'force_col_wise': True,
+            'eval_at': [10]
         }
-        
-        # Train
+
         model = lgb.train(
-            params, 
+            params,
             train_data,
             valid_sets=valid_sets,
             num_boost_round=200,
             callbacks=[lgb.early_stopping(25), lgb.log_evaluation(0)]
         )
-        
+
         return model
     
     def _train_final_model(self, df: pd.DataFrame, feature_columns: List[str]) -> lgb.Booster:
@@ -411,7 +450,7 @@ class BaselineRankerAgent:
         X_scaled = self.final_scaler.fit_transform(X)
         
         # Train final model
-        final_model = self._train_lgbm(X_scaled, y)
+        final_model = self._train_lgbm(X_scaled, y, df['Date'].values)
         
         logger.info("✅ Final model trained")
         return final_model
@@ -525,13 +564,17 @@ class BaselineRankerAgent:
         
         # Check shuffle test (IC should collapse)
         shuffle_pass = abs(robustness_results['shuffle_ic']) < 0.01
+
+        # Check overfit cap on OOS IC
+        overfit_pass = walkforward_results['mean_ic'] <= self.overfit_cap
         
         criteria = {
             'oos_ic': oos_ic_pass,
             'newey_west_tstat': nw_tstat_pass,
             'stability_across_regimes': regime_stability,
             'permutation_test': permutation_pass,
-            'shuffle_test': shuffle_pass
+            'shuffle_test': shuffle_pass,
+            'overfit_cap': overfit_pass
         }
         
         all_pass = all(criteria.values())
@@ -575,6 +618,7 @@ class BaselineRankerAgent:
             'feature_columns': feature_columns,
             'cv_results': {
                 'oof_ic': cv_results['oof_ic'],
+                'oof_ndcg': cv_results['oof_ndcg'],
                 'newey_west_tstat': cv_results['newey_west_tstat'],
                 'fold_results': cv_results['fold_results']
             },
