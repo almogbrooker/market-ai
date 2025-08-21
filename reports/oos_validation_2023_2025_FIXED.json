@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-08-21T20:05:03.300823",
+  "timestamp": "2025-08-21T20:06:40.734338",
   "validation_type": "oos_2023_2025_FIXED",
   "methodology_fixes": [
     "Frozen horizon selection (no OOS cherry-picking)",
@@ -30,15 +30,15 @@
       "ic_pearson": 0.13375446759753437,
       "ic_spearman": 0.09129546000679466,
       "primary_ic": 0.09129546000679466,
-      "portfolio_return_pct": 173.17166115638148,
-      "annualized_return_pct": 670.8144657127249,
-      "portfolio_volatility_pct": 28.23085365409132,
-      "portfolio_sharpe": 23.7617492525065,
-      "max_drawdown_pct": -11.500942916359632,
+      "portfolio_return_pct": 30.72377276761431,
+      "annualized_return_pct": 72.37033277911942,
+      "portfolio_volatility_pct": 7.55640194133046,
+      "portfolio_sharpe": 9.577353526323552,
+      "max_drawdown_pct": -3.578750708778681,
       "trading_days": 124,
-      "avg_daily_turnover": 0.20967741935483875,
-      "median_daily_turnover": 0.16666666666666666,
-      "total_transaction_costs_pct": 0.78
+      "avg_daily_turnover": 0.06068548387096775,
+      "median_daily_turnover": 0.049999999999999996,
+      "total_transaction_costs_pct": 0.22575
     },
     {
       "period": "2023H2_2024",
@@ -51,15 +51,15 @@
       "ic_pearson": 0.055325483798702814,
       "ic_spearman": 0.026218177301543227,
       "primary_ic": 0.026218177301543227,
-      "portfolio_return_pct": 173.15184962833493,
-      "annualized_return_pct": 95.4051911792866,
-      "portfolio_volatility_pct": 22.419661993406077,
-      "portfolio_sharpe": 4.255425046432304,
-      "max_drawdown_pct": -29.949671321405397,
+      "portfolio_return_pct": 37.46591405178332,
+      "annualized_return_pct": 23.631749833116377,
+      "portfolio_volatility_pct": 6.642853795834728,
+      "portfolio_sharpe": 3.557469509254322,
+      "max_drawdown_pct": -10.023488023664628,
       "trading_days": 378,
-      "avg_daily_turnover": 0.22486772486772483,
-      "median_daily_turnover": 0.16666666666666666,
-      "total_transaction_costs_pct": 2.5499999999999994
+      "avg_daily_turnover": 0.06626984126984127,
+      "median_daily_turnover": 0.049999999999999996,
+      "total_transaction_costs_pct": 0.7515
     },
     {
       "period": "2025YTD",
@@ -72,15 +72,15 @@
       "ic_pearson": -0.14472221194896012,
       "ic_spearman": -0.08140145654699579,
       "primary_ic": -0.08140145654699579,
-      "portfolio_return_pct": -20.994542040939667,
-      "annualized_return_pct": -86.18599539097642,
-      "portfolio_volatility_pct": 20.58953689831725,
-      "portfolio_sharpe": -4.185912282369997,
-      "max_drawdown_pct": -22.499129338106993,
+      "portfolio_return_pct": -5.8884166925146975,
+      "annualized_return_pct": -39.93771209484051,
+      "portfolio_volatility_pct": 5.088642829295275,
+      "portfolio_sharpe": -7.848401515806815,
+      "max_drawdown_pct": -6.296328599538975,
       "trading_days": 30,
-      "avg_daily_turnover": 0.25555555555555554,
-      "median_daily_turnover": 0.16666666666666666,
-      "total_transaction_costs_pct": 0.22999999999999995
+      "avg_daily_turnover": 0.06416666666666668,
+      "median_daily_turnover": 0.049999999999999996,
+      "total_transaction_costs_pct": 0.05775
     }
   ],
   "summary": {
@@ -89,18 +89,9 @@
       -0.08140145654699579,
       0.09129546000679466
     ],
-    "average_period_return_pct": 108.44298958125891,
-    "average_sharpe_ratio": 7.943754005522936,
-    "worst_drawdown_pct": -29.949671321405397,
-    "average_daily_turnover": 0.23003356659270638,
+    "average_period_return_pct": 20.767090042294313,
+    "average_sharpe_ratio": 1.762140506590353,
+    "worst_drawdown_pct": -10.023488023664628,
+    "average_daily_turnover": 0.0637073306024919,
     "periods_tested": 3,
-    "validation_passed": false,
-    "realistic_acceptance_gates": {
-      "min_ic": 0.002,
-      "min_sharpe": 0.3,
-      "max_drawdown": -25.0,
-      "min_positive_periods_pct": 60,
-      "max_daily_turnover": 0.8
-    }
-  }
-}
+    "validation_passed": 

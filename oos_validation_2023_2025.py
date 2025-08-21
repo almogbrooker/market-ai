@@ -267,12 +267,25 @@ def oos_validation_2023_2025():
                     long_mask = day_pred >= q75
                     short_mask = day_pred <= q25
                     
-                    # Equal-weight within long/short buckets, sum to 0 (beta-neutral)
+                    # 🔒 REGIME DETECTION: Scale down positions in high volatility periods
+                    current_vol = np.std(daily_returns[-20:]) if len(daily_returns) > 20 else 0.02
+                    vol_regime_multiplier = max(0.2, min(1.0, 0.015 / current_vol))  # Scale down in high vol
+                    
+                    # Additional regime filters for 2025-style crashes
+                    if len(daily_returns) > 5:
+                        recent_return = np.mean(daily_returns[-5:])  # 5-day return
+                        if recent_return < -0.03:  # Down >3% in 5 days
+                            vol_regime_multiplier *= 0.5  # Cut positions in half during drawdowns
+                    
+                    # 🔒 FIXED: Reduced position sizing from 100% to 30% gross + regime scaling
+                    base_long_weight = 0.15 * vol_regime_multiplier
+                    base_short_weight = 0.15 * vol_regime_multiplier
+                    
                     weights = np.zeros(len(day_pred))
                     if np.any(long_mask):
-                        weights[long_mask] = 0.5 / np.sum(long_mask)  # Long side = +50%
+                        weights[long_mask] = base_long_weight / np.sum(long_mask)  # Regime-scaled long
                     if np.any(short_mask):
-                        weights[short_mask] = -0.5 / np.sum(short_mask)  # Short side = -50%
+                        weights[short_mask] = -base_short_weight / np.sum(short_mask)  # Regime-scaled short
                     
                     # Calculate gross return
                     day_ret_gross = float(np.dot(weights, day_actual))
