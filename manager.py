@@ -181,11 +181,12 @@ class OrchestatorAgent:
         logger.info("📝 Starting Paper Trade...")
         
         try:
-            from agents.portfolio_execution_agent import PortfolioExecutionAgent
-            agent = PortfolioExecutionAgent(self.trading_config)
-            return agent.start_paper_trading()
+            from agents.paper_trading_agent import PaperTradingAgent
+            agent = PaperTradingAgent(self.trading_config)
+            agent.start_trading()
+            return True
         except ImportError:
-            logger.error("Paper trading not implemented yet")
+            logger.error("Paper trading agent not implemented yet")
             return False
     
     def _run_reporting_agent(self) -> bool:
