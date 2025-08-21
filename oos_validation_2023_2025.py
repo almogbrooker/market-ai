@@ -309,6 +309,12 @@ def oos_validation_2023_2025():
                     day_cost = cost_per_turn * turnover
                     day_ret_net = day_ret_gross - day_cost
                     
+                    # 🔒 Hard turnover cap: Skip trading if exceeding 50% daily limit  
+                    if turnover > 0.5:
+                        logger.warning(f"Turnover {turnover:.1%} exceeds 50% limit on {date.date()} - skipping trade")
+                        day_ret_net = 0  # No trading this day
+                        weights = np.zeros_like(weights)  # Reset positions
+                    
                     # Update equity curve with geometric compounding
                     equity_curve *= (1.0 + day_ret_net)
                     daily_returns.append(day_ret_net)
@@ -435,13 +441,13 @@ def oos_validation_2023_2025():
                 'worst_drawdown_pct': float(worst_drawdown),
                 'average_daily_turnover': float(avg_turnover),
                 'periods_tested': len(oos_results),
-                'validation_passed': oos_passed,
+                'validation_passed': bool(oos_passed),
                 'realistic_acceptance_gates': {
                     'min_ic': 0.002,
-                    'min_sharpe': 0.3,
+                    'min_sharpe': 0.3,  
                     'max_drawdown': -25.0,
                     'min_positive_periods_pct': 60,
-                    'max_daily_turnover': 0.8
+                    'max_daily_turnover': 0.5  # Fixed to match actual limit
                 }
             }
         }

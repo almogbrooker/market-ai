@@ -238,11 +238,10 @@ class AlphaDataLoader:
         # Handle NaN values in features
         X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
         
-        # Normalize features
-        original_shape = X.shape
-        X_reshaped = X.reshape(-1, X.shape[-1])
-        X_normalized = self.feature_scaler.fit_transform(X_reshaped)
-        X = X_normalized.reshape(original_shape)
+        # 🔒 FIXED: Remove global feature scaling to prevent data leakage
+        # Scaling should be done in training pipeline with proper train/val splits
+        # X_normalized = self.feature_scaler.fit_transform(X_reshaped)  # REMOVED
+        logger.info("✅ Skipping global feature scaling - will be handled in training with proper CV splits")
         
         # Apply label transformations based on mode
         if self.label_mode == 'alpha':
