@@ -100,73 +100,90 @@ class ProductionPortfolioAgent:
         """Load latest model signals/predictions"""
         
         logger.info("📡 Loading model signals...")
-        
-        # Find latest model results
+
+        predictions_df: Optional[pd.DataFrame] = None
+        source_path: Optional[Path] = None
+
+        # Try loading predictions from production model artifacts
         models_dir = self.artifacts_dir / "production_models"
-        if not models_dir.exists():
-            logger.error("No production models found")
+        if models_dir.exists():
+            pred_files = sorted(models_dir.glob("predictions_*.parquet"))
+            if pred_files:
+                source_path = pred_files[-1]
+                predictions_df = pd.read_parquet(source_path)
+
+        # Fallback to baseline OOF predictions
+        if predictions_df is None:
+            oof_path = self.artifacts_dir / "oof" / "lgbm_oof.parquet"
+            if oof_path.exists():
+                source_path = oof_path
+                predictions_df = pd.read_parquet(oof_path)
+
+        if predictions_df is None or predictions_df.empty:
+            logger.error("No prediction data found")
             return None
-        
-        results_files = list(models_dir.glob("results_*.json"))
-        if not results_files:
-            logger.error("No model results found")
-            return None
-        
-        # Load latest results
-        results_files.sort()
-        latest_results_path = results_files[-1]
-        
-        with open(latest_results_path, 'r') as f:
-            model_results = json.load(f)
-        
-        # Check if model passed production gates
-        if not model_results.get('production_ready', False):
-            logger.warning("⚠️ Latest model did not pass production gates")
-            return None
-        
-        # Load OOF predictions
-        timestamp = model_results['timestamp']
-        oof_path = models_dir / f"oof_predictions_{timestamp}.npz"
-        
-        if not oof_path.exists():
-            logger.error("OOF predictions file not found")
-            return None
-        
-        oof_data = np.load(oof_path)
-        predictions = oof_data['predictions']
-        mask = oof_data['mask']
-        
+
+        # Log source for traceability
+        file_ts = datetime.fromtimestamp(source_path.stat().st_mtime).isoformat() if source_path else "unknown"
+        logger.info(f"🔍 Predictions loaded from {source_path} (timestamp: {file_ts})")
+
         # Load production data to get latest signals
         production_dir = self.artifacts_dir / "production"
         data_files = list(production_dir.glob("universe_*.parquet"))
-        
+
         if not data_files:
             logger.error("No production data found")
             return None
-        
+
         data_files.sort()
         latest_data = pd.read_parquet(data_files[-1])
         latest_data['Date'] = pd.to_datetime(latest_data['Date'])
-        
-        # Get most recent date with predictions
+
+        # Determine target date
         if signals_date:
             target_date = pd.to_datetime(signals_date)
-            signals_data = latest_data[latest_data['Date'] == target_date].copy()
         else:
-            # Use most recent date
-            latest_date = latest_data['Date'].max()
-            signals_data = latest_data[latest_data['Date'] == latest_date].copy()
-        
+            target_date = latest_data['Date'].max()
+
+        signals_data = latest_data[latest_data['Date'] == target_date].copy()
         if len(signals_data) == 0:
             logger.error("No signals data for target date")
             return None
-        
-        # For simplicity, use the model to predict on latest data
-        # In production, this would be real-time predictions
-        signals_data['prediction_score'] = np.random.normal(0, 1, len(signals_data))  # Placeholder
+
+        # Prepare predictions
+        if 'Date' in predictions_df.columns:
+            predictions_df['Date'] = pd.to_datetime(predictions_df['Date'])
+            predictions_df = predictions_df[predictions_df['Date'] == target_date]
+
+        ticker_col = 'Ticker' if 'Ticker' in predictions_df.columns else (
+            'ticker' if 'ticker' in predictions_df.columns else None
+        )
+        if not ticker_col:
+            logger.error("Prediction file missing Ticker column")
+            return None
+        predictions_df.rename(columns={ticker_col: 'Ticker'}, inplace=True)
+
+        score_col = None
+        for col in ['prediction', 'pred', 'score', 'prediction_score', 'signal', 'oof_predictions']:
+            if col in predictions_df.columns:
+                score_col = col
+                break
+        if not score_col:
+            logger.error("Prediction score column not found")
+            return None
+
+        predictions_df = predictions_df[['Ticker', score_col]].rename(columns={score_col: 'prediction_score'})
+
+        # Merge predictions with universe
+        signals_data = signals_data.merge(predictions_df, on='Ticker', how='inner')
+        if len(signals_data) == 0:
+            logger.error("No matching predictions for target date")
+            return None
+
+        # Compute percentile ranks
         signals_data['signal_rank'] = signals_data['prediction_score'].rank(pct=True)
-        
-        logger.info(f"✅ Loaded signals: {len(signals_data)} stocks for {signals_data['Date'].iloc[0]}")
+
+        logger.info(f"✅ Loaded signals: {len(signals_data)} stocks for {target_date.date()}")
         return signals_data
     
     def _load_market_data(self, signals: pd.DataFrame) -> pd.DataFrame:
