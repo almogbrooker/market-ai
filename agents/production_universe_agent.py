@@ -14,6 +14,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 from scipy import stats
 import warnings
+import requests
+import os
 warnings.filterwarnings('ignore')
 
 # Setup logging
@@ -58,9 +60,12 @@ class ProductionUniverseAgent:
         try:
             # Step 1: Get NASDAQ universe
             nasdaq_universe = self._get_nasdaq_universe()
-            
+
+            # Step 1.5: Filter for borrow availability
+            nasdaq_universe, borrow_stats = self._filter_borrowable(nasdaq_universe)
+
             # Step 2: Apply liquidity and quality filters
-            filtered_universe = self._apply_production_filters(nasdaq_universe)
+            filtered_universe = self._apply_production_filters(nasdaq_universe, borrow_stats.get('details', {}))
             
             # Step 3: Download price data and validate
             validated_universe = self._validate_universe_data(filtered_universe)
@@ -75,7 +80,7 @@ class ProductionUniverseAgent:
             final_data = self._apply_cross_sectional_scaling(labeled_data)
             
             # Step 7: Save production artifacts
-            self._save_production_artifacts(final_data, date)
+            self._save_production_artifacts(final_data, date, borrow_stats)
             
             logger.info("✅ Production universe built successfully")
             return True
@@ -87,65 +92,110 @@ class ProductionUniverseAgent:
             return False
     
     def _get_nasdaq_universe(self) -> List[str]:
-        """Get comprehensive NASDAQ universe (research-grade)"""
-        
+        """Fetch NASDAQ listings from exchange API or maintained CSV"""
+
         logger.info("📊 Fetching NASDAQ universe...")
-        
-        # Research-backed NASDAQ universe (active, liquid stocks)
-        nasdaq_symbols = [
-            # Technology - Mega/Large Cap
-            'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'TSLA', 'META', 'NVDA',
-            'NFLX', 'INTC', 'CSCO', 'ADBE', 'ORCL', 'CRM', 'AVGO', 'TXN',
-            'QCOM', 'AMAT', 'LRCX', 'KLAC', 'MCHP', 'ADI', 'INTU', 'ISRG',
-            'PYPL', 'SHOP', 'ROKU', 'ZM', 'DOCU', 'CRWD', 'OKTA', 'PANW',
-            
-            # Healthcare & Biotechnology
-            'AMGN', 'GILD', 'REGN', 'VRTX', 'BIIB', 'MRNA', 'ILMN', 'BMRN',
-            'IDXX', 'DXCM', 'TDOC', 'VEEV', 'ALGN', 'EXAS', 'PTCT', 'SRPT',
-            'TECH', 'INCY', 'FOLD', 'RARE', 'UTHR', 'NBIX', 'ALNY',
-            
-            # Consumer Discretionary
-            'COST', 'SBUX', 'DLTR', 'ORLY', 'ROST', 'ULTA', 'LULU',
-            'BKNG', 'EXPE', 'EBAY', 'ETSY', 'CHWY', 'PINS', 'SNAP',
-            'MAR', 'WYNN', 'NCLH', 'CCL', 'TRIP', 'DASH', 'ABNB',
-            
-            # Communication Services
-            'CMCSA', 'CHTR', 'SIRI', 'FOXA', 'FOX', 'TMUS',
-            'LBTYA', 'LBTYK', 'LBRDA', 'LBRDK',
-            
-            # Industrials & Business Services
-            'HON', 'CSX', 'PCAR', 'FAST', 'CTAS', 'VRSK', 'PAYX', 'ADP',
-            'WDAY', 'TEAM', 'NOW', 'CDNS', 'SNPS', 'ANSS', 'PTC',
-            
-            # Semiconductors
-            'AMD', 'MRVL', 'SWKS', 'QRVO', 'CRUS', 'MPWR', 'MXIM',
-            
-            # Growth & Cloud
-            'DOCN', 'SNOW', 'PLTR', 'RBLX', 'U', 'DDOG', 'MDB', 'ZS',
-            'NET', 'FSLY', 'TWLO', 'GTLB', 'MNDY', 'BILL',
-            
-            # International/ADRs (liquid only)
-            'MELI', 'JD', 'PDD', 'BIDU', 'NTES', 'TME', 'BILI',
-            
-            # Additional Quality Names
-            'MNST', 'MDLZ', 'PEP', 'EA', 'TTWO', 'NXPI',
-            'POOL', 'FIVE', 'OLLI', 'WING', 'TXRH'
-        ]
-        
-        # Remove any known delisted/merged tickers
-        active_symbols = [s for s in nasdaq_symbols if s not in ['XLNX', 'ATVI', 'FISV']]
-        
-        logger.info(f"📊 NASDAQ universe: {len(active_symbols)} symbols")
-        return active_symbols
+
+        url = "https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=0"
+        headers = {"User-Agent": "Mozilla/5.0"}
+
+        try:
+            resp = requests.get(url, headers=headers, timeout=30)
+            resp.raise_for_status()
+            rows = resp.json().get("data", {}).get("table", {}).get("rows", [])
+            symbols = [
+                row["symbol"]
+                for row in rows
+                if row.get("exchange", "").upper() in {"NASDAQ", "NMS", "NAS"}
+            ]
+            logger.info(f"📊 NASDAQ universe: {len(symbols)} symbols from API")
+            return symbols
+        except Exception as e:
+            logger.warning(f"Failed to fetch NASDAQ listings from API: {e}")
+            csv_path = self.base_dir / "data" / "nasdaq_listings.csv"
+            if csv_path.exists():
+                df = pd.read_csv(csv_path)
+                symbols = df["symbol"].tolist()
+                logger.info(f"📊 NASDAQ universe: {len(symbols)} symbols from CSV")
+                return symbols
+            raise
+
+    def _filter_borrowable(self, symbols: List[str]) -> Tuple[List[str], Dict[str, Dict]]:
+        """Check borrow availability via Alpaca API and drop failing symbols"""
+
+        api_key = os.getenv("ALPACA_API_KEY_ID")
+        api_secret = os.getenv("ALPACA_API_SECRET_KEY")
+
+        if not api_key or not api_secret:
+            logger.warning("Alpaca API credentials not set; skipping borrow filter")
+            return symbols, {
+                "checked": len(symbols),
+                "shortable": len(symbols),
+                "dropped": 0,
+                "details": {}
+            }
+
+        borrow_details: Dict[str, Dict] = {}
+        keep = []
+
+        for symbol in symbols:
+            try:
+                asset_resp = requests.get(
+                    f"https://paper-api.alpaca.markets/v2/assets/{symbol}",
+                    headers={
+                        "APCA-API-KEY-ID": api_key,
+                        "APCA-API-SECRET-KEY": api_secret,
+                    },
+                    timeout=15,
+                )
+                asset_resp.raise_for_status()
+                asset = asset_resp.json()
+                shortable = asset.get("shortable", False)
+
+                borrow_rate = None
+                try:
+                    rate_resp = requests.get(
+                        f"https://api.alpaca.markets/v1beta1/borrow/rates/{symbol}",
+                        headers={
+                            "APCA-API-KEY-ID": api_key,
+                            "APCA-API-SECRET-KEY": api_secret,
+                        },
+                        timeout=15,
+                    )
+                    if rate_resp.status_code == 200:
+                        borrow_rate = rate_resp.json().get("rate")
+                except Exception:
+                    pass
+
+                borrow_details[symbol] = {
+                    "shortable": shortable,
+                    "borrow_rate": borrow_rate,
+                }
+
+                if shortable and borrow_rate is not None:
+                    keep.append(symbol)
+            except Exception as e:
+                logger.warning(f"Borrow check failed for {symbol}: {e}")
+
+        dropped = len(symbols) - len(keep)
+        stats = {
+            "checked": len(symbols),
+            "shortable": len(keep),
+            "dropped": dropped,
+            "details": borrow_details,
+        }
+        logger.info(f"🔒 Borrow filter: {len(keep)}/{len(symbols)} symbols shortable with rates")
+        return keep, stats
     
-    def _apply_production_filters(self, symbols: List[str]) -> pd.DataFrame:
+    def _apply_production_filters(self, symbols: List[str], borrow_info: Dict[str, Dict] = None) -> pd.DataFrame:
         """Apply research-backed liquidity and quality filters"""
-        
+
         logger.info("🔍 Applying production filters...")
-        
+
+        borrow_info = borrow_info or {}
         universe_data = []
         failed_count = 0
-        
+
         for symbol in symbols:
             try:
                 # Download recent data for filtering
@@ -181,7 +231,8 @@ class ProductionUniverseAgent:
                         'ADV': avg_dollar_volume,
                         'MarketCap': market_cap,
                         'Sector': sector,
-                        'Borrowable': True  # Assume true for large-cap NASDAQ
+                        'Borrowable': borrow_info.get(symbol, {}).get('shortable', False),
+                        'BorrowRate': borrow_info.get(symbol, {}).get('borrow_rate')
                     })
                 else:
                     failed_count += 1
@@ -409,7 +460,7 @@ class ProductionUniverseAgent:
         else:
             return 'Other'
     
-    def _save_production_artifacts(self, df: pd.DataFrame, date: str):
+    def _save_production_artifacts(self, df: pd.DataFrame, date: str, borrow_stats: Dict[str, Dict]):
         """Save production-ready artifacts"""
         
         logger.info("💾 Saving production artifacts...")
@@ -431,16 +482,27 @@ class ProductionUniverseAgent:
             'features': [col for col in df.columns if col.endswith('_zscore')],
             'target': 'residual_return_target',
             'filters_applied': self.filters,
+            'borrow_filter': {
+                'checked': borrow_stats.get('checked', 0),
+                'shortable': borrow_stats.get('shortable', 0),
+                'dropped': borrow_stats.get('dropped', 0),
+            },
             'timestamp': datetime.now().isoformat()
         }
         
         summary_path = self.artifacts_dir / "production" / f"summary_{date.replace('-', '')}.json"
         with open(summary_path, 'w') as f:
             json.dump(summary, f, indent=2, default=str)
+
+        # Save detailed borrow stats
+        borrow_path = self.artifacts_dir / "production" / f"borrow_stats_{date.replace('-', '')}.json"
+        with open(borrow_path, 'w') as f:
+            json.dump(borrow_stats, f, indent=2, default=str)
         
         logger.info(f"✅ Production artifacts saved:")
         logger.info(f"   Dataset: {dataset_path}")
         logger.info(f"   Summary: {summary_path}")
+        logger.info(f"   Borrow stats: {borrow_path}")
         logger.info(f"   Stocks: {df['Ticker'].nunique()}")
         logger.info(f"   Samples: {len(df)}")
 
