@@ -13,6 +13,7 @@ import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 from sklearn.preprocessing import StandardScaler
+import joblib
 from scipy.stats import spearmanr
 import warnings
 warnings.filterwarnings('ignore')
@@ -60,7 +61,8 @@ class ProductionModelAgent:
                 return {'success': False, 'reason': 'No data available'}
             
             # Prepare features and targets
-            features, targets, groups = self._prepare_model_data(data)
+            features, targets, groups, scaler = self._prepare_model_data(data)
+            self.scaler = scaler
             
             # Walk-forward validation
             oof_results = self._walk_forward_validation(features, targets, groups, data)
@@ -136,8 +138,8 @@ class ProductionModelAgent:
             logger.error(f"Failed to load data: {e}")
             return None
     
-    def _prepare_model_data(self, data: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Prepare features, targets, and groups for LambdaRank"""
+    def _prepare_model_data(self, data: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, np.ndarray, StandardScaler]:
+        """Prepare features, targets, groups, and scaler for LambdaRank"""
         
         logger.info("🔧 Preparing model data...")
         
@@ -156,7 +158,11 @@ class ProductionModelAgent:
         # Fill missing values
         for col in feature_cols:
             data[col] = data[col].fillna(0)  # Cross-sectional z-scores, 0 = neutral
-        
+
+        # Scale features
+        scaler = StandardScaler()
+        data[feature_cols] = scaler.fit_transform(data[feature_cols])
+
         # Prepare arrays
         features = data[feature_cols].values
         targets = data['residual_return_target'].values
@@ -169,8 +175,8 @@ class ProductionModelAgent:
         logger.info(f"   Features: {len(feature_cols)} ({feature_cols[:3]}...)")
         logger.info(f"   Samples: {len(features)}")
         logger.info(f"   Groups (dates): {len(np.unique(groups))}")
-        
-        return features, targets, groups
+
+        return features, targets, groups, scaler
     
     def _walk_forward_validation(self, features: np.ndarray, targets: np.ndarray, 
                                 groups: np.ndarray, data: pd.DataFrame) -> Dict[str, any]:
@@ -567,14 +573,20 @@ class ProductionModelAgent:
         (self.artifacts_dir / "production_models").mkdir(parents=True, exist_ok=True)
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        
+
         # Save model
         model_path = self.artifacts_dir / "production_models" / f"lambdarank_{timestamp}.txt"
         model.save_model(str(model_path))
-        
+
+        # Save scaler
+        scaler_path = None
+        if hasattr(self, 'scaler') and self.scaler is not None:
+            scaler_path = self.artifacts_dir / "production_models" / f"scaler_{timestamp}.pkl"
+            joblib.dump(self.scaler, scaler_path)
+
         # Save OOF predictions
         oof_path = self.artifacts_dir / "production_models" / f"oof_predictions_{timestamp}.npz"
-        np.savez(oof_path, 
+        np.savez(oof_path,
                 predictions=oof_results['oof_predictions'],
                 mask=oof_results['oof_mask'])
         
@@ -593,9 +605,11 @@ class ProductionModelAgent:
         results_path = self.artifacts_dir / "production_models" / f"results_{timestamp}.json"
         with open(results_path, 'w') as f:
             json.dump(results, f, indent=2, default=str)
-        
+
         logger.info(f"✅ Model artifacts saved:")
         logger.info(f"   Model: {model_path}")
+        if scaler_path is not None:
+            logger.info(f"   Scaler: {scaler_path}")
         logger.info(f"   OOF: {oof_path}")
         logger.info(f"   Results: {results_path}")
 
