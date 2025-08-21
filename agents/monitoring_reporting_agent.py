@@ -38,6 +38,31 @@ class MonitoringReportingAgent:
         logger.info(f"   Daily Reports: {self.reporting_config.get('daily_reports', True)}")
         logger.info(f"   Performance Attribution: {self.reporting_config.get('performance_attribution', True)}")
         logger.info(f"   Risk Analytics: {self.reporting_config.get('risk_analytics', True)}")
+
+    def capture_trading_metrics(self, slippage_bps: float, exposure: Dict[str, float], drawdown: float) -> None:
+        """Capture real-time trading metrics"""
+
+        metrics = {
+            'timestamp': datetime.now().isoformat(),
+            'slippage_bps': slippage_bps,
+            'gross_exposure': exposure.get('gross', 0.0),
+            'net_exposure': exposure.get('net', 0.0),
+            'drawdown': drawdown,
+        }
+
+        metrics_dir = self.artifacts_dir / 'metrics'
+        metrics_dir.mkdir(parents=True, exist_ok=True)
+        metrics_file = metrics_dir / 'paper_trading_metrics.json'
+
+        existing = []
+        if metrics_file.exists():
+            try:
+                existing = json.loads(metrics_file.read_text())
+            except Exception:
+                existing = []
+        existing.append(metrics)
+        metrics_file.write_text(json.dumps(existing, indent=2))
+        logger.info(f"📊 Captured trading metrics: {metrics}")
         
     def generate_daily_report(self, date: Optional[str] = None) -> Dict[str, Any]:
         """

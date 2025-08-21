@@ -62,6 +62,12 @@
     "duration_weeks": 10,
     "required_positive_ic": true,
     "cost_tolerance": 0.2,
-    "risk_limits_enforced": true
+    "risk_limits_enforced": true,
+    "validation_window_months": 6,
+    "alpaca": {
+      "api_key": "YOUR_ALPACA_API_KEY",
+      "secret_key": "YOUR_ALPACA_SECRET_KEY",
+      "base_url": "https://paper-api.alpaca.markets"
+    }
   }
 }
