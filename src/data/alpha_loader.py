@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import torch
 from typing import Tuple, Optional, Dict, List
+from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 import logging
 
@@ -44,9 +45,21 @@ class AlphaDataLoader:
         """Load and process data for Alpha prediction"""
         
         logger.info(f"Loading data for {self.label_mode} prediction...")
-        
+
+        # Validate file paths
+        training_path = Path(training_data_path)
+        qqq_path = Path(qqq_data_path)
+        if not training_path.is_file():
+            raise FileNotFoundError(f"Training data file not found: {training_data_path}")
+        if not qqq_path.is_file():
+            raise FileNotFoundError(f"QQQ data file not found: {qqq_data_path}")
+
         # Load stock data
-        df = pd.read_csv(training_data_path)
+        try:
+            df = pd.read_csv(training_path)
+        except pd.errors.ParserError:
+            logger.exception(f"Failed to parse training data file: {training_data_path}")
+            raise
         
         # Standardize column names
         if 'date' in df.columns and 'Date' not in df.columns:
@@ -59,7 +72,11 @@ class AlphaDataLoader:
         df['Date'] = pd.to_datetime(df['Date'])
         
         # Load QQQ benchmark data
-        qqq_df = pd.read_csv(qqq_data_path)
+        try:
+            qqq_df = pd.read_csv(qqq_path)
+        except pd.errors.ParserError:
+            logger.exception(f"Failed to parse QQQ data file: {qqq_data_path}")
+            raise
         qqq_df['Date'] = pd.to_datetime(qqq_df['Date'])
         qqq_returns = qqq_df.set_index('Date')['Return_1']
         
