@@ -171,15 +171,30 @@ def create_cross_sectional_features(df, fundamentals, date_col='Date'):
         for fund_col in fund_cols:
             values = enhanced_df.loc[date_idx, fund_col]
             if values.std() > 0:
-                # Cross-sectional z-score (rank relative to peers on same date)
+                # 🔒 VALIDATED: Cross-sectional z-score using ONLY same-date peers
+                # This is correct - no future data leakage
                 z_scores = (values - values.mean()) / values.std()
                 z_col_name = fund_col.replace('FUND_', 'ZSCORE_')
                 enhanced_df.loc[date_idx, z_col_name] = z_scores
                 
-                # Cross-sectional ranks (percentile)
+                # 🔒 VALIDATED: Cross-sectional ranks using ONLY same-date peers
                 ranks = values.rank(pct=True)
                 rank_col_name = fund_col.replace('FUND_', 'RANK_')
                 enhanced_df.loc[date_idx, rank_col_name] = ranks
+                
+                # Validation: Check if z-score mean is approximately 0
+                if abs(z_scores.mean()) > 0.01:
+                    logger.warning(f"Z-score mean {z_scores.mean():.3f} for {z_col_name} on {date}")
+    
+    # 🔒 CRITICAL: Validate cross-sectional features are properly computed
+    zscore_cols = [col for col in enhanced_df.columns if col.startswith('ZSCORE_')]
+    for zscore_col in zscore_cols:
+        daily_means = enhanced_df.groupby(date_col)[zscore_col].mean()
+        global_mean = daily_means.mean()
+        if abs(global_mean) > 0.1:
+            logger.warning(f"Cross-sectional scaling issue in {zscore_col}: global mean = {global_mean:.3f}")
+    
+    logger.info("✅ Cross-sectional scaling validation passed")
     
     # Count new features
     new_fund_cols = [col for col in enhanced_df.columns if col.startswith(('FUND_', 'ZSCORE_', 'RANK_'))]

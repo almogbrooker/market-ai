@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-08-21T19:58:15.831175",
+  "timestamp": "2025-08-21T20:05:03.300823",
   "validation_type": "oos_2023_2025_FIXED",
   "methodology_fixes": [
     "Frozen horizon selection (no OOS cherry-picking)",

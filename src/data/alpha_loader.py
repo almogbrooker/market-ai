@@ -101,10 +101,12 @@ class AlphaDataLoader:
         # Sort by ticker and date
         df = df.sort_values(['Ticker', 'Date'])
         
-        # Calculate forward returns for each horizon
+        # 🔒 FIXED: Calculate forward returns with proper lag (no same-day signaling)
+        # Use shift(-horizon-1) to ensure signal computed BEFORE tradeable period
         for horizon in [1, 5, 20]:
             future_col = f'Future_Return_{horizon}D'
-            df[future_col] = df.groupby('Ticker')['Close'].pct_change(periods=horizon).shift(-horizon)
+            # CRITICAL FIX: Add 1-day buffer to prevent same-close signaling
+            df[future_col] = df.groupby('Ticker')['Close'].pct_change(periods=horizon).shift(-(horizon + 1))
         
         return df
     
@@ -115,11 +117,12 @@ class AlphaDataLoader:
         df = df.merge(qqq_returns.to_frame('QQQ_Return').reset_index(), 
                       on='Date', how='left')
         
-        # Calculate forward QQQ returns
+        # 🔒 FIXED: Calculate forward QQQ returns with proper lag
         qqq_df_temp = pd.DataFrame({'Date': qqq_returns.index, 'QQQ_Return': qqq_returns.values})
         for horizon in [1, 5, 20]:
             future_qqq_col = f'QQQ_Future_Return_{horizon}D'
-            qqq_df_temp[future_qqq_col] = qqq_df_temp['QQQ_Return'].shift(-horizon)
+            # CRITICAL FIX: Add 1-day buffer for QQQ returns too
+            qqq_df_temp[future_qqq_col] = qqq_df_temp['QQQ_Return'].shift(-(horizon + 1))
         
         # Merge future QQQ returns
         df = df.merge(qqq_df_temp[['Date'] + [f'QQQ_Future_Return_{h}D' for h in [1, 5, 20]]], 
@@ -177,7 +180,19 @@ class AlphaDataLoader:
         
         feature_cols = [col for col in df.columns if col not in exclude_cols]
         
-        logger.info(f"Using {len(feature_cols)} features: {feature_cols[:10]}...")
+        # 🔒 CRITICAL: Validate no future-looking features leaked through
+        forbidden_patterns = ['future', 'lead', 'target', 'next_', '_0d', 'same_day']
+        leaked_features = []
+        for feature_col in feature_cols:
+            for pattern in forbidden_patterns:
+                if pattern in feature_col.lower():
+                    leaked_features.append(feature_col)
+        
+        if leaked_features:
+            raise ValueError(f"CRITICAL: Future-looking features detected: {leaked_features}")
+        
+        logger.info(f"✅ Using {len(feature_cols)} validated features: {feature_cols[:10]}...")
+        logger.info(f"🔒 Temporal validation passed - no future-looking features detected")
         
         sequences = []
         targets = []

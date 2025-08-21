@@ -370,21 +370,27 @@ def oos_validation_2023_2025():
         logger.info(f"   Average Daily Turnover: {avg_turnover:.1%}")
         logger.info(f"   Periods tested: {len(oos_results)}")
         
-        # 🔒 FIXED: Realistic pass/fail criteria  
+        # 🔒 FIXED: Realistic pass/fail criteria with capacity constraints
         oos_passed = (
             avg_ic >= 0.002 and  # Average IC ≥ 0.2% (realistic for cross-sectional)
             avg_sharpe >= 0.3 and  # Sharpe ≥ 0.3 (reasonable with costs)
             worst_drawdown >= -25.0 and  # Max drawdown ≤ 25%
             len([ic for ic in all_ics if ic > 0]) >= len(all_ics) * 0.6 and  # 60% positive periods
-            avg_turnover <= 0.8  # Daily turnover ≤ 80% (capacity constraint)
+            avg_turnover <= 0.5  # Daily turnover ≤ 50% (institutional capacity limit)
         )
+        
+        # Additional capacity warnings
+        if avg_turnover > 0.3:
+            logger.warning(f"⚠️ High turnover {avg_turnover:.1%} may exceed institutional capacity")
+        if avg_turnover > 0.5:
+            logger.error(f"❌ Turnover {avg_turnover:.1%} exceeds realistic trading capacity")
         
         logger.info(f"\n🏆 OOS VALIDATION (FIXED): {'✅ PASSED' if oos_passed else '❌ FAILED'}")
         logger.info(f"   ✓ IC ≥ 0.2%: {'✅' if avg_ic >= 0.002 else '❌'}")
         logger.info(f"   ✓ Sharpe ≥ 0.3: {'✅' if avg_sharpe >= 0.3 else '❌'}")
         logger.info(f"   ✓ Drawdown ≤ 25%: {'✅' if worst_drawdown >= -25.0 else '❌'}")
         logger.info(f"   ✓ 60% positive periods: {'✅' if len([ic for ic in all_ics if ic > 0]) >= len(all_ics) * 0.6 else '❌'}")
-        logger.info(f"   ✓ Turnover ≤ 80%: {'✅' if avg_turnover <= 0.8 else '❌'}")
+        logger.info(f"   ✓ Turnover ≤ 50%: {'✅' if avg_turnover <= 0.5 else '❌'}")
         
         # Save results with fixed validation methodology
         final_results = {
