@@ -1,0 +1,106 @@
+{
+  "timestamp": "2025-08-21T19:58:15.831175",
+  "validation_type": "oos_2023_2025_FIXED",
+  "methodology_fixes": [
+    "Frozen horizon selection (no OOS cherry-picking)",
+    "Spearman IC for cross-sectional robustness",
+    "Realistic transaction costs (6 bps roundtrip)",
+    "Proper geometric compounding",
+    "Beta-neutral portfolio construction",
+    "Turnover-based cost model"
+  ],
+  "training_period": "2020-05-26 00:00:00 to 2022-12-30 00:00:00",
+  "ensemble_model": {
+    "features_count": 24,
+    "train_ic_5d": 0.007535933648675553,
+    "train_ic_20d": 0.024799600362163242,
+    "frozen_weight_5d": 0.23305425066273922,
+    "frozen_weight_20d": 0.7669457493372608,
+    "frozen_horizon": "5d"
+  },
+  "oos_results": [
+    {
+      "period": "2023H1",
+      "samples": 2976,
+      "features_used": 24,
+      "date_range": "2023-01-03 00:00:00 to 2023-06-30 00:00:00",
+      "frozen_horizon": "5d",
+      "frozen_weight_5d": 0.23305425066273922,
+      "frozen_weight_20d": 0.7669457493372608,
+      "ic_pearson": 0.13375446759753437,
+      "ic_spearman": 0.09129546000679466,
+      "primary_ic": 0.09129546000679466,
+      "portfolio_return_pct": 173.17166115638148,
+      "annualized_return_pct": 670.8144657127249,
+      "portfolio_volatility_pct": 28.23085365409132,
+      "portfolio_sharpe": 23.7617492525065,
+      "max_drawdown_pct": -11.500942916359632,
+      "trading_days": 124,
+      "avg_daily_turnover": 0.20967741935483875,
+      "median_daily_turnover": 0.16666666666666666,
+      "total_transaction_costs_pct": 0.78
+    },
+    {
+      "period": "2023H2_2024",
+      "samples": 9072,
+      "features_used": 24,
+      "date_range": "2023-07-03 00:00:00 to 2024-12-31 00:00:00",
+      "frozen_horizon": "5d",
+      "frozen_weight_5d": 0.23305425066273922,
+      "frozen_weight_20d": 0.7669457493372608,
+      "ic_pearson": 0.055325483798702814,
+      "ic_spearman": 0.026218177301543227,
+      "primary_ic": 0.026218177301543227,
+      "portfolio_return_pct": 173.15184962833493,
+      "annualized_return_pct": 95.4051911792866,
+      "portfolio_volatility_pct": 22.419661993406077,
+      "portfolio_sharpe": 4.255425046432304,
+      "max_drawdown_pct": -29.949671321405397,
+      "trading_days": 378,
+      "avg_daily_turnover": 0.22486772486772483,
+      "median_daily_turnover": 0.16666666666666666,
+      "total_transaction_costs_pct": 2.5499999999999994
+    },
+    {
+      "period": "2025YTD",
+      "samples": 720,
+      "features_used": 24,
+      "date_range": "2025-01-02 00:00:00 to 2025-02-14 00:00:00",
+      "frozen_horizon": "5d",
+      "frozen_weight_5d": 0.23305425066273922,
+      "frozen_weight_20d": 0.7669457493372608,
+      "ic_pearson": -0.14472221194896012,
+      "ic_spearman": -0.08140145654699579,
+      "primary_ic": -0.08140145654699579,
+      "portfolio_return_pct": -20.994542040939667,
+      "annualized_return_pct": -86.18599539097642,
+      "portfolio_volatility_pct": 20.58953689831725,
+      "portfolio_sharpe": -4.185912282369997,
+      "max_drawdown_pct": -22.499129338106993,
+      "trading_days": 30,
+      "avg_daily_turnover": 0.25555555555555554,
+      "median_daily_turnover": 0.16666666666666666,
+      "total_transaction_costs_pct": 0.22999999999999995
+    }
+  ],
+  "summary": {
+    "average_spearman_ic": 0.012037393587114031,
+    "ic_range": [
+      -0.08140145654699579,
+      0.09129546000679466
+    ],
+    "average_period_return_pct": 108.44298958125891,
+    "average_sharpe_ratio": 7.943754005522936,
+    "worst_drawdown_pct": -29.949671321405397,
+    "average_daily_turnover": 0.23003356659270638,
+    "periods_tested": 3,
+    "validation_passed": false,
+    "realistic_acceptance_gates": {
+      "min_ic": 0.002,
+      "min_sharpe": 0.3,
+      "max_drawdown": -25.0,
+      "min_positive_periods_pct": 60,
+      "max_daily_turnover": 0.8
+    }
+  }
+}
