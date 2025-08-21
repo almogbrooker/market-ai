@@ -104,41 +104,70 @@ class DataBuilder:
         return tickers
     
     def _fetch_price_data(self, tickers: List[str]) -> pd.DataFrame:
-        """Fetch OHLCV data for all tickers"""
+        """Fetch OHLCV data for all tickers with caching and retries"""
         
         logger.info(f"📊 Fetching price data for {len(tickers)} tickers...")
-        
-        all_data = []
-        failed_tickers = []
-        
+
+        cache_dir = Path("data/price_cache")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        all_data: List[pd.DataFrame] = []
+        failed_tickers: List[str] = []
+
+        max_retries = 3
+        backoff = 2
+
         for ticker in tickers:
-            try:
-                stock = yf.Ticker(ticker)
-                data = stock.history(start=self.start_date, auto_adjust=True)
-                
-                if data.empty:
-                    failed_tickers.append(ticker)
-                    continue
-                
-                # Clean and standardize
-                data = data.reset_index()
-                data['Ticker'] = ticker
-                data['Date'] = pd.to_datetime(data['Date']).dt.tz_localize(None)
-                
-                # Ensure we have required columns
-                required_cols = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
-                if all(col in data.columns for col in required_cols):
-                    data = data[required_cols + ['Ticker']]
+            cache_file = cache_dir / f"{ticker}.csv"
+
+            # Load from cache if available
+            if cache_file.exists():
+                logger.info(f"💾 Cache hit for {ticker}")
+                try:
+                    data = pd.read_csv(cache_file, parse_dates=['Date'])
                     all_data.append(data)
-                else:
-                    failed_tickers.append(ticker)
-                
-                # Rate limiting
-                time.sleep(0.1)
-                
-            except Exception as e:
-                logger.warning(f"Failed to fetch {ticker}: {e}")
-                failed_tickers.append(ticker)
+                    continue
+                except Exception as e:
+                    logger.warning(f"Failed to load cache for {ticker}: {e}; refetching")
+
+            for attempt in range(max_retries):
+                try:
+                    stock = yf.Ticker(ticker)
+                    data = stock.history(start=self.start_date, auto_adjust=True)
+
+                    if data.empty:
+                        raise ValueError("Empty data returned")
+
+                    # Clean and standardize
+                    data = data.reset_index()
+                    data['Ticker'] = ticker
+                    data['Date'] = pd.to_datetime(data['Date']).dt.tz_localize(None)
+
+                    # Ensure we have required columns
+                    required_cols = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
+                    if all(col in data.columns for col in required_cols):
+                        data = data[required_cols + ['Ticker']]
+                        all_data.append(data)
+                        data.to_csv(cache_file, index=False)
+                        logger.info(f"💾 Cached data for {ticker}")
+                    else:
+                        raise ValueError("Missing required columns")
+
+                    # Rate limiting
+                    time.sleep(0.1)
+                    break
+
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        wait = backoff ** attempt
+                        logger.warning(
+                            f"Retry {attempt+1}/{max_retries} for {ticker} after error: {e}; waiting {wait}s"
+                        )
+                        time.sleep(wait)
+                    else:
+                        logger.warning(f"Failed to fetch {ticker} after {max_retries} attempts: {e}")
+                        failed_tickers.append(ticker)
+                        break
         
         if failed_tickers:
             logger.warning(f"⚠️ Failed to fetch data for: {failed_tickers}")
