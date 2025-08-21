@@ -120,7 +120,7 @@ class ResearchAgent:
         research_data['Date'] = pd.to_datetime(research_data['Date'])
         
         # Filter to valid data with targets
-        research_data = research_data[research_data['excess_return_21d'].notna()].copy()
+        research_data = research_data[research_data['residual_return_1d'].notna()].copy()
         
         logger.info(f"✅ Loaded research data: {len(research_data)} samples, {research_data['Ticker'].nunique()} tickers")
         logger.info(f"   Date range: {research_data['Date'].min()} to {research_data['Date'].max()}")
@@ -268,11 +268,11 @@ class ResearchAgent:
         
         # Merge with forward returns
         merged_data = revision_df.merge(
-            data[['Ticker', 'Date', 'excess_return_21d']], 
+            data[['Ticker', 'Date', 'residual_return_1d']], 
             on=['Ticker', 'Date'], 
             how='left'
         )
-        merged_data = merged_data[merged_data['excess_return_21d'].notna()]
+        merged_data = merged_data[merged_data['residual_return_1d'].notna()]
         
         if len(merged_data) == 0:
             return {'error': 'No analyst revision data available'}
@@ -281,15 +281,15 @@ class ResearchAgent:
         analysis = {}
         
         # EPS revision momentum
-        eps_revision_corr = merged_data['eps_revision_pct'].corr(merged_data['excess_return_21d'])
+        eps_revision_corr = merged_data['eps_revision_pct'].corr(merged_data['residual_return_1d'])
         analysis['eps_revision_correlation'] = eps_revision_corr
         
         # Price target revision correlation
-        pt_revision_corr = merged_data['price_target_revision_pct'].corr(merged_data['excess_return_21d'])
+        pt_revision_corr = merged_data['price_target_revision_pct'].corr(merged_data['residual_return_1d'])
         analysis['price_target_correlation'] = pt_revision_corr
         
         # Consensus change analysis
-        consensus_returns = merged_data.groupby('consensus_change')['excess_return_21d'].mean().to_dict()
+        consensus_returns = merged_data.groupby('consensus_change')['residual_return_1d'].mean().to_dict()
         analysis['consensus_change_returns'] = consensus_returns
         
         # Information ratio
@@ -351,11 +351,11 @@ class ResearchAgent:
         
         # Merge with returns
         merged_data = short_df.merge(
-            data[['Ticker', 'Date', 'excess_return_21d']], 
+            data[['Ticker', 'Date', 'residual_return_1d']], 
             on=['Ticker', 'Date'], 
             how='left'
         )
-        merged_data = merged_data[merged_data['excess_return_21d'].notna()]
+        merged_data = merged_data[merged_data['residual_return_1d'].notna()]
         
         if len(merged_data) == 0:
             return {'error': 'No short interest data available'}
@@ -364,15 +364,15 @@ class ResearchAgent:
         analysis = {}
         
         # Short interest vs returns (typically negative correlation)
-        short_corr = merged_data['short_interest_pct'].corr(merged_data['excess_return_21d'])
+        short_corr = merged_data['short_interest_pct'].corr(merged_data['residual_return_1d'])
         analysis['short_interest_correlation'] = short_corr
         
         # Borrow fee vs returns
-        borrow_corr = merged_data['borrow_fee_pct'].corr(merged_data['excess_return_21d'])
+        borrow_corr = merged_data['borrow_fee_pct'].corr(merged_data['residual_return_1d'])
         analysis['borrow_fee_correlation'] = borrow_corr
         
         # Squeeze risk vs returns
-        squeeze_corr = merged_data['squeeze_risk_score'].corr(merged_data['excess_return_21d'])
+        squeeze_corr = merged_data['squeeze_risk_score'].corr(merged_data['residual_return_1d'])
         analysis['squeeze_risk_correlation'] = squeeze_corr
         
         # High short interest bucket analysis
@@ -380,8 +380,8 @@ class ResearchAgent:
         low_short = merged_data[merged_data['short_interest_pct'] < 5]
         
         if len(high_short) > 0 and len(low_short) > 0:
-            analysis['high_short_mean_return'] = high_short['excess_return_21d'].mean()
-            analysis['low_short_mean_return'] = low_short['excess_return_21d'].mean()
+            analysis['high_short_mean_return'] = high_short['residual_return_1d'].mean()
+            analysis['low_short_mean_return'] = low_short['residual_return_1d'].mean()
             analysis['short_spread'] = analysis['low_short_mean_return'] - analysis['high_short_mean_return']
         
         # Information ratio
@@ -439,7 +439,7 @@ class ResearchAgent:
         for feature in momentum_features:
             rank_feature = f'{feature}_sector_rank'
             if rank_feature in data_with_ranks.columns:
-                corr = data_with_ranks[rank_feature].corr(data_with_ranks['excess_return_21d'])
+                corr = data_with_ranks[rank_feature].corr(data_with_ranks['residual_return_1d'])
                 correlations[f'{feature}_sector_relative'] = corr
                 
                 # Information ratio
@@ -447,8 +447,8 @@ class ResearchAgent:
                 analysis[f'{feature}_sector_ir'] = ir
         
         # Sector momentum (sector ETF relative)
-        sector_momentum = data_with_ranks.groupby(['Date', 'sector'])['excess_return_21d'].mean().reset_index()
-        sector_momentum['sector_momentum'] = sector_momentum.groupby('sector')['excess_return_21d'].shift(1)
+        sector_momentum = data_with_ranks.groupby(['Date', 'sector'])['residual_return_1d'].mean().reset_index()
+        sector_momentum['sector_momentum'] = sector_momentum.groupby('sector')['residual_return_1d'].shift(1)
         
         # Merge back and test
         data_with_sector_mom = data_with_ranks.merge(
@@ -458,7 +458,7 @@ class ResearchAgent:
         )
         
         if 'sector_momentum' in data_with_sector_mom.columns:
-            sector_mom_corr = data_with_sector_mom['sector_momentum'].corr(data_with_sector_mom['excess_return_21d'])
+            sector_mom_corr = data_with_sector_mom['sector_momentum'].corr(data_with_sector_mom['residual_return_1d'])
             correlations['sector_momentum'] = sector_mom_corr
             analysis['sector_momentum_ir'] = abs(sector_mom_corr) * np.sqrt(len(data_with_sector_mom)) if not np.isnan(sector_mom_corr) else 0
         
@@ -521,11 +521,11 @@ class ResearchAgent:
         
         # Merge with returns (looking at forward returns from event date)
         merged_data = event_df.merge(
-            data[['Ticker', 'Date', 'excess_return_21d']], 
+            data[['Ticker', 'Date', 'residual_return_1d']], 
             on=['Ticker', 'Date'], 
             how='left'
         )
-        merged_data = merged_data[merged_data['excess_return_21d'].notna()]
+        merged_data = merged_data[merged_data['residual_return_1d'].notna()]
         
         if len(merged_data) == 0:
             return {'error': 'No event NLP data available'}
@@ -534,18 +534,18 @@ class ResearchAgent:
         analysis = {}
         
         # Sentiment vs returns
-        sentiment_corr = merged_data['sentiment_score'].corr(merged_data['excess_return_21d'])
+        sentiment_corr = merged_data['sentiment_score'].corr(merged_data['residual_return_1d'])
         analysis['sentiment_correlation'] = sentiment_corr
         
         # FinBERT features
-        finbert_positive_corr = merged_data['finbert_positive'].corr(merged_data['excess_return_21d'])
-        finbert_negative_corr = merged_data['finbert_negative'].corr(merged_data['excess_return_21d'])
+        finbert_positive_corr = merged_data['finbert_positive'].corr(merged_data['residual_return_1d'])
+        finbert_negative_corr = merged_data['finbert_negative'].corr(merged_data['residual_return_1d'])
         
         analysis['finbert_positive_corr'] = finbert_positive_corr
         analysis['finbert_negative_corr'] = finbert_negative_corr
         
         # Event type analysis
-        event_type_returns = merged_data.groupby('event_type')['excess_return_21d'].mean().to_dict()
+        event_type_returns = merged_data.groupby('event_type')['residual_return_1d'].mean().to_dict()
         analysis['event_type_returns'] = event_type_returns
         
         # Combined NLP score
@@ -555,7 +555,7 @@ class ResearchAgent:
             merged_data['finbert_negative'] * 0.3
         )
         
-        nlp_score_corr = merged_data['nlp_score'].corr(merged_data['excess_return_21d'])
+        nlp_score_corr = merged_data['nlp_score'].corr(merged_data['residual_return_1d'])
         analysis['combined_nlp_correlation'] = nlp_score_corr
         
         # Information ratios

@@ -31,7 +31,7 @@ Implementation of the complete NASDAQ Long/Short Alpha Program following chat-g.
 ### **2) Labeling & Target Agent - ✅ COMPLETE**
 - **File**: `agents/labeling_agent.py` 
 - **Features**:
-  - Primary target: 21-day excess returns (stock - sector ETF)
+  - Primary target: Next-day residual returns (stock vs QQQ + sector dummies)
   - Meta-labels: Trinary {-1,0,+1} with dead-zone ±(cost + 10bps)
   - Barrier labels: 5-day triple-barrier (TP/SL/timeout)
   - Comprehensive leakage audit
