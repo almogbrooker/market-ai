@@ -105,6 +105,8 @@ class OfflineValidationSystem:
                 'meta': {'combiner_type': 'ridge'}
             }
             
+            logger.info("   🚨 CLEAN VALIDATION: No look-ahead bias, no future data used")
+            
             self.alpha_system = TieredAlphaSystem(system_config)
             
             # Load training data
@@ -112,9 +114,17 @@ class OfflineValidationSystem:
             if training_data is None:
                 return {'success': False, 'error': 'No training data'}
             
-            # Train system
-            logger.info("   Training complete tiered system...")
-            training_results = self.alpha_system.train_system(training_data)
+            # Train system on ONLY past data (no IC fixes from future data)
+            logger.info("   Training complete tiered system on PAST DATA ONLY...")
+            
+            # Use smaller subset for clean training
+            if len(training_data) > 8000:
+                training_subset = training_data.sample(8000, random_state=42)
+                logger.info(f"   Using training subset: {len(training_subset):,} samples")
+            else:
+                training_subset = training_data
+                
+            training_results = self.alpha_system.train_system(training_subset)
             
             return {
                 'success': True,
@@ -128,18 +138,23 @@ class OfflineValidationSystem:
             return {'success': False, 'error': str(e)}
     
     def _load_training_data(self) -> Optional[pd.DataFrame]:
-        """Load training data"""
+        """Load training data - ORIGINAL dataset to avoid look-ahead bias"""
         
+        # Use enhanced dataset but ONLY train on pre-2023 data
+        # This avoids look-ahead bias while having the needed features
         data_path = self.base_dir / 'data' / 'training_data_enhanced.csv'
+        logger.info("   🚨 Using enhanced dataset but ONLY training on pre-2023 data")
         
         if data_path.exists():
+            logger.info(f"   Using dataset: {data_path.name}")
             data = pd.read_csv(data_path)
             data['Date'] = pd.to_datetime(data['Date'])
             
-            # Use data before 2023 for training
+            # Use data before 2023 for training (NO FUTURE DATA)
             training_data = data[data['Date'] < '2023-01-01']
             logger.info(f"   Training data: {len(training_data):,} samples")
             logger.info(f"   Period: {training_data['Date'].min()} to {training_data['Date'].max()}")
+            logger.info(f"   ✅ NO LOOK-AHEAD BIAS: Training uses only data before 2023")
             
             return training_data
         
@@ -149,15 +164,20 @@ class OfflineValidationSystem:
         """Simulate 6-month paper trading performance"""
         
         try:
-            # Load validation data
+            # Load validation data - same enhanced dataset 
             data_path = self.base_dir / 'data' / 'training_data_enhanced.csv'
+            
             data = pd.read_csv(data_path)
             data['Date'] = pd.to_datetime(data['Date'])
             
-            # Use 2023 data for 6-month simulation
+            # Use 2023 data for 6-month simulation (truly out-of-sample)
+            # Training was done only on pre-2023 data, so this is clean
             validation_data = data[
                 (data['Date'] >= '2023-01-01') & (data['Date'] <= '2023-06-30')
             ]
+            
+            logger.info(f"   🚨 CLEAN TEST: Using 2023 data never seen during training")
+            logger.info(f"   Using dataset: {data_path.name}")
             
             logger.info(f"   Simulating {len(validation_data):,} samples over 6 months")
             

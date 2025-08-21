@@ -1,0 +1,69 @@
+{
+  "timestamp": "2025-08-21T19:28:30.667982",
+  "validation_type": "oos_2023_2025",
+  "training_period": "2020-05-26 00:00:00 to 2022-12-30 00:00:00",
+  "ensemble_model": {
+    "features_count": 24,
+    "train_ic_5d": 0.007535933648675553,
+    "train_ic_20d": 0.024799600362163242,
+    "weight_5d": 0.23305425066273922,
+    "weight_20d": 0.7669457493372608
+  },
+  "oos_results": [
+    {
+      "period": "2023H1",
+      "samples": 2976,
+      "features_used": 24,
+      "date_range": "2023-01-03 00:00:00 to 2023-06-30 00:00:00",
+      "ic_1d": 0.056092476121111665,
+      "ic_5d": 0.13375446759753437,
+      "ic_20d": 0.18944617916878026,
+      "best_ic": 0.18944617916878026,
+      "best_horizon": "20d",
+      "portfolio_return_pct": 271.9381779062566,
+      "portfolio_volatility_pct": 37.30342824642202,
+      "portfolio_sharpe": 14.814953506393062,
+      "trading_days": 124
+    },
+    {
+      "period": "2023H2_2024",
+      "samples": 9072,
+      "features_used": 24,
+      "date_range": "2023-07-03 00:00:00 to 2024-12-31 00:00:00",
+      "ic_1d": 0.02193492169549308,
+      "ic_5d": 0.055325483798702814,
+      "ic_20d": 0.10717559984236566,
+      "best_ic": 0.10717559984236566,
+      "best_horizon": "20d",
+      "portfolio_return_pct": 365.43949455417345,
+      "portfolio_volatility_pct": 45.90618841609841,
+      "portfolio_sharpe": 5.307047657595273,
+      "trading_days": 378
+    },
+    {
+      "period": "2025YTD",
+      "samples": 720,
+      "features_used": 24,
+      "date_range": "2025-01-02 00:00:00 to 2025-02-14 00:00:00",
+      "ic_1d": -0.039200780509478936,
+      "ic_5d": -0.14472221194896012,
+      "ic_20d": -0.21524728963722745,
+      "best_ic": -0.21524728963722745,
+      "best_horizon": "20d",
+      "portfolio_return_pct": -67.41607754120994,
+      "portfolio_volatility_pct": 22.673904964435195,
+      "portfolio_sharpe": -24.9756295721631,
+      "trading_days": 30
+    }
+  ],
+  "summary": {
+    "average_ic": 0.027124829791306166,
+    "ic_range": [
+      -0.21524728963722745,
+      0.18944617916878026
+    ],
+    "total_portfolio_return_pct": 569.9615949192201,
+    "periods_tested": 3,
+    "validation_passed": true
+  }
+}
