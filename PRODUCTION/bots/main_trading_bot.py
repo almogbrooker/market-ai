@@ -5,6 +5,7 @@ Main production-ready trading bot with all safeguards
 """
 
 import json
+import time
 import numpy as np
 import pandas as pd
 import torch
@@ -13,6 +14,14 @@ from pathlib import Path
 import logging
 from datetime import datetime
 import warnings
+from monitoring import (
+    LATENCY,
+    GROSS_EXPOSURE,
+    DAILY_LOSS,
+    SIGNAL_ACCEPT_RATE,
+    start_monitoring,
+)
+
 warnings.filterwarnings('ignore')
 
 class ProductionTradingBot:
@@ -94,6 +103,7 @@ class ProductionTradingBot:
     
     def generate_signals(self, market_data):
         """Generate trading signals with all safeguards"""
+        start_time = time.time()
         try:
             if self.model is None:
                 self.logger.error("Model not loaded")
@@ -142,14 +152,19 @@ class ProductionTradingBot:
             
             # Filter by gate
             signals_df = signals_df[gate_mask]
-            
+
             accept_rate = gate_mask.mean()
-            self.logger.info(f"Generated {len(signals_df)} signals (accept rate: {accept_rate:.1%})")
-            
+            SIGNAL_ACCEPT_RATE.set(accept_rate)
+            self.logger.info(
+                f"Generated {len(signals_df)} signals (accept rate: {accept_rate:.1%})"
+            )
+
+            LATENCY.labels(operation="generate_signals").observe(time.time() - start_time)
             return signals_df
-            
+
         except Exception as e:
             self.logger.error(f"❌ Signal generation failed: {e}")
+            LATENCY.labels(operation="generate_signals").observe(time.time() - start_time)
             return None
     
     def validate_market_data(self, data):
@@ -187,14 +202,19 @@ class ProductionTradingBot:
         
         # Take top signals (use baseline positions)
         final_signals = signals_df.head(target_positions).copy()
-        
-        self.logger.info(f"Risk management: {len(final_signals)} positions, "
-                        f"gross exposure: {len(final_signals) * self.risk_limits['max_position_size']:.1%}")
-        
+
+        gross_exposure = len(final_signals) * self.risk_limits['max_position_size']
+        GROSS_EXPOSURE.set(gross_exposure)
+        self.logger.info(
+            f"Risk management: {len(final_signals)} positions, "
+            f"gross exposure: {gross_exposure:.1%}"
+        )
+
         return final_signals
     
     def run_live_trading(self):
         """Main live trading loop (demo version)"""
+        start_time = time.time()
         self.logger.info("🚀 Starting production trading bot")
         
         if not self.load_model():
@@ -239,9 +259,12 @@ class ProductionTradingBot:
             
         except Exception as e:
             self.logger.error(f"❌ Trading loop error: {e}")
+        finally:
+            LATENCY.labels(operation="run_live_trading").observe(time.time() - start_time)
 
 def main():
     """Main bot execution"""
+    start_monitoring()
     bot = ProductionTradingBot()
     bot.run_live_trading()
 
