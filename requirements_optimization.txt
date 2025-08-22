@@ -55,6 +55,8 @@ joblib==1.4.2                    # Model serialization
 cloudpickle==3.0.0               # Advanced pickling
 schedule==1.2.2                  # Task scheduling
 psutil==6.0.0                    # System monitoring
+mlflow==2.14.1                   # Experiment tracking
+dvc==3.51.0                      # Data version control
 
 # === CONFIGURATION & ENVIRONMENT ===
 python-dotenv==1.0.1             # Environment variable management

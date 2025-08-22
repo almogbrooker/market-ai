@@ -30,6 +30,8 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from .advanced_models import PatchTST, iTransformer
+from src.utils.experiment_tracking import MLflowTracker
+from src.utils.model_registry import register_promotion
 
 logger = logging.getLogger(__name__)
 
@@ -393,47 +395,55 @@ class ModelTrainer:
     
     def train_all(self) -> Dict:
         """Train all models with purged cross-validation"""
-        
-        logger.info("🚀 Starting comprehensive model training...")
-        
-        # Load data
-        data = pd.read_parquet(self.dataset_path)
-        logger.info(f"📊 Loaded data: {data.shape}")
-        
-        # Prepare features and targets
-        X, y, meta_features = self._prepare_data(data)
-        
-        # Setup cross-validation
-        if self.cv_type == 'purged':
-            cv_splitter = PurgedTimeSeriesSplit(
-                n_splits=self.folds,
-                purge_days=self.purge_days,
-                embargo_days=self.embargo_days
-            )
-        else:
-            cv_splitter = TimeSeriesSplit(n_splits=self.folds)
-        
-        # Train time series models
-        ts_results, oof_df = self._train_ts_models(X, y, cv_splitter)
+        tracker = MLflowTracker(self.dataset_path)
+        with tracker:
+            logger.info("🚀 Starting comprehensive model training...")
 
-        # Train meta-model
-        meta_results = self._train_meta_model(X, y, meta_features, oof_df, ts_results)
-        
-        # Calculate regime-based metrics and turnover
-        regime_metrics = self._calculate_regime_metrics(X, y, meta_features, oof_df)
-        turnover_metrics = self._calculate_turnover_metrics(oof_df, meta_features)
-        
-        # Combine results
-        results = {
-            'ts_models': ts_results,
-            'meta_model': meta_results,
-            'cv_metrics': self._calculate_cv_metrics(ts_results, meta_results),
-            'regime_metrics': regime_metrics,
-            'turnover_metrics': turnover_metrics
-        }
-        
-        logger.info("✅ All models trained successfully")
-        return results
+            # Load data
+            data = pd.read_parquet(self.dataset_path)
+            logger.info(f"📊 Loaded data: {data.shape}")
+
+            # Prepare features and targets
+            X, y, meta_features = self._prepare_data(data)
+
+            # Setup cross-validation
+            if self.cv_type == 'purged':
+                cv_splitter = PurgedTimeSeriesSplit(
+                    n_splits=self.folds,
+                    purge_days=self.purge_days,
+                    embargo_days=self.embargo_days
+                )
+            else:
+                cv_splitter = TimeSeriesSplit(n_splits=self.folds)
+
+            # Train time series models
+            ts_results, oof_df = self._train_ts_models(X, y, cv_splitter)
+
+            # Train meta-model
+            meta_results = self._train_meta_model(X, y, meta_features, oof_df, ts_results)
+
+            # Calculate regime-based metrics and turnover
+            regime_metrics = self._calculate_regime_metrics(X, y, meta_features, oof_df)
+            turnover_metrics = self._calculate_turnover_metrics(oof_df, meta_features)
+
+            # Combine results
+            results = {
+                'ts_models': ts_results,
+                'meta_model': meta_results,
+                'cv_metrics': self._calculate_cv_metrics(ts_results, meta_results),
+                'regime_metrics': regime_metrics,
+                'turnover_metrics': turnover_metrics
+            }
+
+            tracker.log_metrics(results.get('cv_metrics', {}))
+            if tracker.run_id:
+                stage = register_promotion(
+                    tracker.run_id, results['cv_metrics'].get('ic', 0.0)
+                )
+                logger.info(f"📦 Model run {tracker.run_id} registered to {stage}")
+
+            logger.info("✅ All models trained successfully")
+            return results
     
     def _prepare_data(self, data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
         """Prepare features and targets with meta-labeling (chat-g.txt)"""
