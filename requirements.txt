@@ -1,0 +1,10 @@
+numpy
+pandas
+torch
+joblib
+python-dotenv
+ruff
+flake8
+black
+mypy
+pytest
