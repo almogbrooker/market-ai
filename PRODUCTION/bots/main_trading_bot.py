@@ -180,21 +180,23 @@ class ProductionTradingBot:
             return signals_df
 
         valid_rows = []
+        temp_notional = self.current_notional
         for _, row in signals_df.iterrows():
             size = row["position_size"]
             notional = abs(size)
             spread = row.get("spread", 0.0)
             expected_alpha = abs(row.get("prediction", 0.0))
-            cost = spread * size
+            spread_cost = spread * notional
 
-            if self.current_notional + notional > self.risk_limits["max_notional_exposure"]:
+            if temp_notional + notional > self.risk_limits["max_notional_exposure"]:
                 self.logger.warning("Notional exposure cap reached; skipping order")
                 continue
 
-            if cost >= expected_alpha:
+            if spread_cost >= expected_alpha:
                 self.logger.info("Spread cost exceeds expected alpha; skipping order")
                 continue
 
+            temp_notional += notional
             valid_rows.append(row)
 
         if not valid_rows:
