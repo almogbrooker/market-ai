@@ -13,7 +13,8 @@ PRODUCTION/                    # 🎯 PRODUCTION-READY FILES
 │   ├── institutional_audit_system.py # Complete audit system
 │   ├── drift_monitoring_system.py    # Real-time drift monitoring
 │   ├── ic_reality_check.py          # IC validation tool
-│   └── fix_conformal_gate.py        # Gate recalibration
+│   ├── fix_conformal_gate.py        # Gate recalibration
+│   └── trading_dashboard.py         # Live metrics dashboard
 ├── config/                    # Configuration files
 │   ├── main_config.json             # System configuration
 │   └── trading_config.json          # Trading parameters
@@ -40,6 +41,7 @@ cd PRODUCTION/tools/
 python institutional_audit_system.py    # Full institutional audit
 python drift_monitoring_system.py       # Check for model drift
 python ic_reality_check.py             # Validate IC performance
+streamlit run trading_dashboard.py      # Live metrics dashboard
 ```
 
 ### 3. Check Performance
