@@ -55,6 +55,7 @@ joblib==1.4.2                    # Model serialization
 cloudpickle==3.0.0               # Advanced pickling
 schedule==1.2.2                  # Task scheduling
 psutil==6.0.0                    # System monitoring
+prometheus-client==0.20.0          # Prometheus metrics exporter
 
 # === CONFIGURATION & ENVIRONMENT ===
 python-dotenv==1.0.1             # Environment variable management

@@ -15,6 +15,12 @@ import logging
 from datetime import datetime, timedelta
 import time
 import warnings
+from monitoring import (
+    LATENCY,
+    GROSS_EXPOSURE,
+    SIGNAL_ACCEPT_RATE,
+    start_monitoring,
+)
 warnings.filterwarnings('ignore')
 
 try:
@@ -264,6 +270,7 @@ class AlpacaProductionTrader:
     
     def generate_signals(self, market_data):
         """Generate trading signals"""
+        start_time = time.time()
         try:
             if self.model is None:
                 self.logger.error("Model not loaded")
@@ -322,12 +329,16 @@ class AlpacaProductionTrader:
             
             # Filter by gate
             signals_df = signals_df[gate_mask]
-            
+
+            accept_rate = len(signals_df) / len(clean_data) if len(clean_data) else 0
+            SIGNAL_ACCEPT_RATE.set(accept_rate)
             self.logger.info(f"Generated {len(signals_df)} signals")
+            LATENCY.labels(operation="generate_signals").observe(time.time() - start_time)
             return signals_df
-            
+
         except Exception as e:
             self.logger.error(f"❌ Signal generation failed: {e}")
+            LATENCY.labels(operation="generate_signals").observe(time.time() - start_time)
             return None
     
     def calculate_rsi(self, prices, periods=14):
@@ -345,7 +356,7 @@ class AlpacaProductionTrader:
             return
         
         self.logger.info(f"🎯 Executing trades for {len(signals_df)} signals")
-        
+
         try:
             # Get account info
             account = self.trading_client.get_account()
@@ -356,7 +367,10 @@ class AlpacaProductionTrader:
             target_signals = signals_df.head(baseline_positions)
             
             orders_submitted = []
-            
+
+            gross_exposure = len(target_signals) * self.risk_limits["max_position_size"]
+            GROSS_EXPOSURE.set(gross_exposure)
+
             for _, signal in target_signals.iterrows():
                 symbol = signal['ticker']
                 prediction = signal['prediction']
@@ -430,9 +444,10 @@ class AlpacaProductionTrader:
 
 def main():
     """Main execution function"""
+    start_monitoring()
     print("🏛️ ALPACA PRODUCTION TRADING SYSTEM")
     print("=" * 60)
-    
+
     # Initialize trader (paper trading by default)
     trader = AlpacaProductionTrader(paper_trading=True)
     
