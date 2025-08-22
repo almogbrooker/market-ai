@@ -23,9 +23,13 @@ class DriftMonitor:
         self.baseline_data_path = baseline_data_path
         self.drift_thresholds = {
             "psi_warning": 0.1,
+            "psi_alert": 0.2,
             "psi_critical": 0.25,
             "ic_degradation": 0.005,  # IC drops by 0.5%
-            "accept_rate_change": 0.1  # Accept rate changes by 10%
+            "accept_rate_change": 0.1,  # Accept rate changes by 10%
+            "feature_psi": 0.2,
+            "feature_ks": 0.1,
+            "feature_cvm": 0.02,
         }
         
     def calculate_psi(self, baseline_scores, current_scores, bins=10):
@@ -154,6 +158,26 @@ class DriftMonitor:
         except Exception as e:
             print(f"IC calculation error: {e}")
             return np.nan
+
+    def update_ic_history(self, ic_value, window=20):
+        """Update rolling IC history and return rolling mean"""
+        history_path = Path("reports/drift_monitoring/ic_history.csv")
+        history_path.parent.mkdir(parents=True, exist_ok=True)
+
+        record = pd.DataFrame([
+            {"timestamp": datetime.now().isoformat(), "ic": ic_value}
+        ])
+
+        if history_path.exists():
+            history_df = pd.read_csv(history_path)
+            history_df = pd.concat([history_df, record], ignore_index=True)
+        else:
+            history_df = record
+
+        # Keep only the last `window` records for rolling computation
+        history_df.tail(window).to_csv(history_path, index=False)
+        rolling_ic = history_df.tail(window)["ic"].mean()
+        return float(rolling_ic)
     
     def monitor_drift(self, current_data_df, baseline_predictions=None):
         """Monitor drift across multiple dimensions"""
@@ -206,7 +230,17 @@ class DriftMonitor:
                     "message": f"Critical drift detected (PSI: {psi_score:.4f})"
                 })
                 print(f"🚨 CRITICAL: PSI {psi_score:.4f} > {self.drift_thresholds['psi_critical']}")
-                
+
+            elif psi_score >= self.drift_thresholds["psi_alert"]:
+                drift_report["status"] = "WARNING" if drift_report["status"] == "NORMAL" else drift_report["status"]
+                drift_report["alerts"].append({
+                    "type": "PSI_ALERT",
+                    "value": psi_score,
+                    "threshold": self.drift_thresholds["psi_alert"],
+                    "message": f"PSI exceeded alert threshold (PSI: {psi_score:.4f})"
+                })
+                print(f"⚠️ ALERT: PSI {psi_score:.4f} > {self.drift_thresholds['psi_alert']}")
+
             elif psi_score >= self.drift_thresholds["psi_warning"]:
                 drift_report["status"] = "WARNING" if drift_report["status"] == "NORMAL" else drift_report["status"]
                 drift_report["alerts"].append({
@@ -216,15 +250,19 @@ class DriftMonitor:
                     "message": f"Moderate drift detected (PSI: {psi_score:.4f})"
                 })
                 print(f"⚠️ WARNING: PSI {psi_score:.4f} > {self.drift_thresholds['psi_warning']}")
-                
+
             else:
                 print(f"✅ PSI within normal range")
         
         # 2. Information Coefficient Drift
         current_ic = self.calculate_ic(current_predictions, current_returns)
         drift_report["metrics"]["current_ic"] = current_ic
-        
+
+        rolling_ic = self.update_ic_history(current_ic)
+        drift_report["metrics"]["rolling_ic"] = rolling_ic
+
         print(f"📈 Current IC: {current_ic:.4f}")
+        print(f"📈 Rolling IC: {rolling_ic:.4f}")
         
         # Load historical IC for comparison
         historical_ic = self.load_historical_ic()
@@ -250,6 +288,15 @@ class DriftMonitor:
         # 3. Feature Drift Analysis
         feature_drift = self.analyze_feature_drift(current_eval_data)
         drift_report["metrics"]["feature_drift"] = feature_drift
+        if feature_drift.get("drift_feature_count", 0) > 0:
+            drift_report["status"] = "WARNING" if drift_report["status"] == "NORMAL" else drift_report["status"]
+            drift_report["alerts"].append({
+                "type": "FEATURE_DRIFT",
+                "psi_features": feature_drift.get("high_psi_features", []),
+                "ks_features": feature_drift.get("high_ks_features", []),
+                "cvm_features": feature_drift.get("high_cvm_features", []),
+                "message": "Feature distribution drift detected",
+            })
         
         # 4. Conformal Gate Drift
         gate_drift = self.analyze_gate_drift(current_predictions)
@@ -266,44 +313,63 @@ class DriftMonitor:
         return drift_report
     
     def analyze_feature_drift(self, eval_data):
-        """Analyze drift in individual features"""
-        
+        """Analyze distribution drift in individual features"""
+
         print(f"\n🔍 Feature Drift Analysis")
         print("-" * 30)
-        
+
         # Load feature list
         with open(self.model_dir / "features.json", 'r') as f:
             features = json.load(f)
-        
-        feature_stats = {}
-        high_drift_features = []
-        
+
+        baseline_df = pd.read_csv(self.baseline_data_path) if self.baseline_data_path else None
+
+        feature_metrics = {}
+        high_psi = []
+        high_ks = []
+        high_cvm = []
+
         for feature in features[:10]:  # Analyze top 10 features
-            if feature in eval_data.columns:
-                values = eval_data[feature].dropna()
-                if len(values) > 10:
-                    feature_stats[feature] = {
-                        "mean": float(values.mean()),
-                        "std": float(values.std()),
-                        "skewness": float(values.skew()) if len(values) > 3 else 0,
-                        "kurtosis": float(values.kurtosis()) if len(values) > 3 else 0
+            if baseline_df is not None and feature in eval_data.columns and feature in baseline_df.columns:
+                current_vals = eval_data[feature].dropna()
+                baseline_vals = baseline_df[feature].dropna()
+                if len(current_vals) > 10 and len(baseline_vals) > 10:
+                    psi = self.calculate_psi(baseline_vals.values, current_vals.values)
+                    ks_stat, _ = stats.ks_2samp(baseline_vals, current_vals)
+                    cvm_stat = stats.cramervonmises_2samp(baseline_vals, current_vals).statistic
+
+                    feature_metrics[feature] = {
+                        "psi": float(psi),
+                        "ks": float(ks_stat),
+                        "cvm": float(cvm_stat),
                     }
-                    
-                    # Simple drift detection based on extreme values
-                    if abs(feature_stats[feature]["skewness"]) > 5:
-                        high_drift_features.append(feature)
-        
-        if high_drift_features:
-            print(f"⚠️ High drift features: {len(high_drift_features)}")
-            for feat in high_drift_features[:3]:
-                print(f"  {feat}: skew={feature_stats[feat]['skewness']:.2f}")
+
+                    if psi > self.drift_thresholds["feature_psi"]:
+                        high_psi.append(feature)
+                    if ks_stat > self.drift_thresholds["feature_ks"]:
+                        high_ks.append(feature)
+                    if cvm_stat > self.drift_thresholds["feature_cvm"]:
+                        high_cvm.append(feature)
+
+        total_alerts = set(high_psi + high_ks + high_cvm)
+        if total_alerts:
+            print(f"⚠️ High drift features: {len(total_alerts)}")
+            for feat in list(total_alerts)[:3]:
+                metrics = feature_metrics.get(feat, {})
+                print(
+                    f"  {feat}: PSI={metrics.get('psi', float('nan')):.3f}, "
+                    f"KS={metrics.get('ks', float('nan')):.3f}, "
+                    f"CvM={metrics.get('cvm', float('nan')):.3f}"
+                )
         else:
-            print("✅ No extreme feature drift detected")
-        
+            print("✅ No significant feature drift detected")
+
         return {
-            "feature_stats": feature_stats,
-            "high_drift_features": high_drift_features,
-            "drift_feature_count": len(high_drift_features)
+            "metrics": feature_metrics,
+            "high_psi_features": high_psi,
+            "high_ks_features": high_ks,
+            "high_cvm_features": high_cvm,
+            "drift_feature_count": len(total_alerts),
         }
     
     def analyze_gate_drift(self, current_predictions):
@@ -428,6 +494,7 @@ class DriftMonitor:
             "psi": drift_report["metrics"].get("psi", np.nan),
             "current_ic": drift_report["metrics"].get("current_ic", np.nan),
             "ic_change": drift_report["metrics"].get("ic_change", np.nan),
+            "rolling_ic": drift_report["metrics"].get("rolling_ic", np.nan),
             "alert_count": len(drift_report["alerts"])
         }
         
