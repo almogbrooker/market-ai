@@ -89,3 +89,6 @@ api_keys.json
 # Large datasets
 *.h5
 *.hdf5
+
+# Production config secrets
+PRODUCTION/config/*.env
