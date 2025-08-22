@@ -13,6 +13,24 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import json
 
+from jsonschema import validate
+from jsonschema.exceptions import ValidationError as JSONSchemaValidationError
+from pydantic import ValidationError as PydanticValidationError
+
+from PRODUCTION.config.settings import Settings
+
+
+def load_live_trading_config() -> dict:
+    """Load and validate live trading configuration against its JSON schema."""
+    config_path = Path("PRODUCTION/config/live_trading_config.json")
+    schema_path = Path("PRODUCTION/config/live_trading_config.schema.json")
+    with open(config_path, "r") as f:
+        config = json.load(f)
+    with open(schema_path, "r") as f:
+        schema = json.load(f)
+    validate(instance=config, schema=schema)
+    return config
+
 class AutomatedTradingSystem:
     """Fully automated trading system with continuous operation"""
     
@@ -22,19 +40,27 @@ class AutomatedTradingSystem:
         self.running = True
         
     def setup_environment(self):
-        """Load environment and check setup"""
-        # Load Alpaca credentials
-        env_file = Path("PRODUCTION/config/alpaca.env")
-        if env_file.exists():
-            with open(env_file, 'r') as f:
-                for line in f:
-                    if '=' in line and not line.startswith('#'):
-                        key, value = line.strip().split('=', 1)
-                        os.environ[key] = value
-        
+        """Load environment, validate configuration, and check setup"""
+        try:
+            self.settings = Settings()
+            # ensure secrets are available to subprocesses without logging
+            os.environ["ALPACA_API_KEY"] = self.settings.alpaca_api_key.get_secret_value()
+            os.environ["ALPACA_API_SECRET"] = self.settings.alpaca_api_secret.get_secret_value()
+            os.environ["PAPER_TRADING"] = "true" if self.settings.paper_trading else "false"
+            os.environ["MAX_POSITION_SIZE"] = str(self.settings.max_position_size)
+            os.environ["BASELINE_EXPOSURE"] = str(self.settings.baseline_exposure)
+            os.environ["MAX_EXPOSURE"] = str(self.settings.max_exposure)
+        except PydanticValidationError as e:
+            raise RuntimeError(f"Settings validation error: {e}") from e
+
+        try:
+            self.live_config = load_live_trading_config()
+        except JSONSchemaValidationError as e:
+            raise RuntimeError(f"Live trading config validation error: {e.message}") from e
+
         print("🏛️ AUTOMATED TRADING SYSTEM STARTED")
         print(f"⏰ Time: {datetime.now()}")
-        print(f"📊 Mode: {'Paper Trading' if os.getenv('PAPER_TRADING', 'true') == 'true' else 'Live Trading'}")
+        print(f"📊 Mode: {'Paper Trading' if self.settings.paper_trading else 'Live Trading'}")
         
     def is_trading_day(self):
         """Check if today is a trading day"""
@@ -171,9 +197,9 @@ class AutomatedTradingSystem:
             from alpaca.trading.client import TradingClient
             
             client = TradingClient(
-                api_key=os.getenv('ALPACA_API_KEY'),
-                secret_key=os.getenv('ALPACA_API_SECRET'),
-                paper=True
+                api_key=self.settings.alpaca_api_key.get_secret_value(),
+                secret_key=self.settings.alpaca_api_secret.get_secret_value(),
+                paper=self.settings.paper_trading,
             )
             
             account = client.get_account()

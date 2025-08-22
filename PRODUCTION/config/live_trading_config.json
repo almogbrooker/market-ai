@@ -1,0 +1,7 @@
+{
+  "max_position_size": 0.03,
+  "baseline_exposure": 0.33,
+  "max_exposure": 0.60,
+  "order_type": "market",
+  "max_orders_per_day": 50
+}
