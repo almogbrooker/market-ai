@@ -1070,7 +1070,7 @@ class ModelTrainer:
                 for i, model in enumerate(model_info['models']):
                     model_path = model_dir / f"{model_name}_fold_{i}.pt"
                     torch.save(model.state_dict(), model_path)
-                    scaler_path = model_dir / f"{model_name}_fold_{i}_scaler.pkl"
+                    scaler_path = model_dir / f"{model_name}_fold_{i}_scaler.joblib"
                     joblib.dump(model_info['scalers'][i], scaler_path)
                     meta_path = model_dir / f"{model_name}_fold_{i}_meta.json"
                     with open(meta_path, 'w') as f:

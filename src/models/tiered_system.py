@@ -118,7 +118,7 @@ class TieredAlphaSystem:
             # Load models and scalers
             for fold_id in range(3):
                 model_path = sleeve_dir / f"sleeve_c_fold_{fold_id}_model.txt"
-                scaler_path = sleeve_dir / f"sleeve_c_fold_{fold_id}_scaler.pkl"
+                scaler_path = sleeve_dir / f"sleeve_c_fold_{fold_id}_scaler.joblib"
                 
                 if model_path.exists() and scaler_path.exists():
                     # Load LightGBM model

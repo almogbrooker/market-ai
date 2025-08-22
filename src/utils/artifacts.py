@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, Optional
 
 import joblib
 import torch
@@ -19,7 +19,7 @@ def save_model_artifacts(
     feature_list: Iterable[str],
     gate_config: Dict[str, Any],
     training_meta: Dict[str, Any],
-) -> Path:
+) -> Optional[Path]:
     """Atomically save model artifacts and metadata.
 
     Parameters
@@ -39,8 +39,8 @@ def save_model_artifacts(
 
     Returns
     -------
-    Path
-        Path to backup of previous model version if it existed.
+    Optional[Path]
+        Path to backup of previous model version if it existed, otherwise ``None``.
     """
     model_dir = Path(model_dir)
     model_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -68,8 +68,9 @@ def save_model_artifacts(
         with open(tmp_dir / "model_card.json", "w") as f:
             json.dump(model_card, f, indent=2)
 
-        backup_dir = model_dir.parent / f"{model_dir.name}_backup_{datetime.now():%Y%m%d_%H%M%S}"
+        backup_dir: Optional[Path] = None
         if model_dir.exists():
+            backup_dir = model_dir.parent / f"{model_dir.name}_backup_{datetime.now():%Y%m%d_%H%M%S}"
             shutil.move(str(model_dir), str(backup_dir))
         shutil.move(str(tmp_dir), str(model_dir))
         return backup_dir
