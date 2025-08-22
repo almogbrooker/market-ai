@@ -20,8 +20,10 @@ import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 import logging
 import argparse
+import subprocess
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import mlflow
 
 # Import our modules
 import sys
@@ -40,6 +42,7 @@ from training.sharpe_loss import create_risk_aware_loss
 # -----------------------------------------------------------------------------
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+mlflow.start_run()
 
 # -----------------------------------------------------------------------------
 # Utilities
@@ -96,6 +99,22 @@ class AdvancedTrainer:
         os.makedirs(f"{self.exp_dir}/checkpoints", exist_ok=True)
         os.makedirs(f"{self.exp_dir}/plots", exist_ok=True)
         os.makedirs(f"{self.exp_dir}/logs", exist_ok=True)
+
+        # MLflow tracking
+        mlflow.set_tag("mlflow.runName", self.experiment_name)
+        mlflow.log_params({
+            "use_causal_mask": use_causal_mask,
+            "zero_threshold_bps": zero_threshold_bps,
+            "label_mode": label_mode,
+            "prediction_horizon": prediction_horizon,
+            "neutral_zone_bps": neutral_zone_bps,
+        })
+        try:
+            commit_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+            mlflow.log_param("git_commit", commit_hash)
+        except Exception as e:
+            logger.warning(f"Could not retrieve git commit: {e}")
+        mlflow.log_param("dataset_version", self._get_dataset_version())
         
         # Model configurations for manual training
         self.model_configs = {
@@ -158,6 +177,13 @@ class AdvancedTrainer:
 
         # Attempt to resume training from checkpoints created in prior runs
         self._auto_detect_checkpoints()
+
+    def _get_dataset_version(self):
+        for env_var in ("DVC_DATA_VERSION", "LAKEFS_COMMIT", "DATASET_VERSION"):
+            val = os.environ.get(env_var)
+            if val:
+                return val
+        return "unknown"
 
     # ----------------------- Session Logging -----------------------
     def _log_session_status(self):
@@ -653,6 +679,13 @@ class AdvancedTrainer:
             train_accuracies.append(float(avg_train_acc))
             val_accuracies.append(float(avg_val_acc))
 
+            mlflow.log_metrics({
+                "train_loss": avg_train_loss,
+                "val_loss": avg_val_loss,
+                "train_acc": avg_train_acc,
+                "val_acc": avg_val_acc
+            }, step=epoch + 1)
+
             # Progress logs
             if epoch % 10 == 0 or epoch == epochs - 1:
                 now = datetime.now()
@@ -708,6 +741,13 @@ class AdvancedTrainer:
             if patience_counter >= patience:
                 logger.info(f"Early stopping for {model_name} at epoch {epoch+1}")
                 break
+        try:
+            mlflow.log_artifact(metrics_csv, artifact_path=model_name)
+            best_ckpt = f"{self.exp_dir}/checkpoints/best_{model_name}.pth"
+            if os.path.exists(best_ckpt):
+                mlflow.log_artifact(best_ckpt, artifact_path=model_name)
+        except Exception as e:
+            logger.warning(f"MLflow artifact logging failed: {e}")
 
         return {
             'train_losses': train_losses,
@@ -777,20 +817,26 @@ class AdvancedTrainer:
             logger.info("="*80)
             logger.info(f"🏗️  Architecture: {cfg['type']}")
             logger.info(f"⚙️  Parameters: {cfg['params']}")
-            self._log_session_status()
+            with mlflow.start_run(run_name=model_name, nested=True):
+                mlflow.log_param("model_type", cfg['type'])
+                mlflow.log_params(cfg['params'])
+                self._log_session_status()
 
-            try:
-                model = create_advanced_model(cfg['type'], input_size, **cfg['params']).to(self.device)
-                params = sum(p.numel() for p in model.parameters())
-                logger.info(f"Model parameters: {params:,}")
+                try:
+                    model = create_advanced_model(cfg['type'], input_size, **cfg['params']).to(self.device)
+                    params = sum(p.numel() for p in model.parameters())
+                    logger.info(f"Model parameters: {params:,}")
 
-                model_results = self.train_model(model, train_loader, val_loader, model_name, epochs=2000)
-                model_results['param_count'] = params
-                model_results['config'] = cfg
-                results[model_name] = model_results
-            except Exception as e:
-                logger.error(f"Failed to train {model_name}: {e}")
-                continue
+                    model_results = self.train_model(model, train_loader, val_loader, model_name, epochs=2000)
+                    model_results['param_count'] = params
+                    model_results['config'] = cfg
+                    mlflow.log_metric("best_val_loss", model_results['best_val_loss'])
+                    if model_results['val_accuracies']:
+                        mlflow.log_metric("final_val_acc", model_results['val_accuracies'][-1])
+                    results[model_name] = model_results
+                except Exception as e:
+                    logger.error(f"Failed to train {model_name}: {e}")
+                    continue
 
         # Save comparison summary
         out_json = f"{self.exp_dir}/model_comparison.json"
@@ -900,6 +946,13 @@ class AdvancedTrainer:
 
         results = self.compare_models(X, y, vol, input_size, ticker_ids)
         self.plot_comparison(results)
+        try:
+            mlflow.log_artifacts(f"{self.exp_dir}/plots", artifact_path="plots")
+            comparison_json = f"{self.exp_dir}/model_comparison.json"
+            if os.path.exists(comparison_json):
+                mlflow.log_artifact(comparison_json)
+        except Exception as e:
+            logger.warning(f"MLflow artifact logging failed: {e}")
 
         final_time = datetime.now()
         total_h = (final_time - self.training_start_time).total_seconds() / 3600.0
@@ -946,46 +999,57 @@ class AdvancedTrainer:
         logger.info("📈 Advanced AI trading models ready for deployment!")
         logger.info("="*80)
 
+        if mlflow.active_run():
+            mlflow.end_run()
+
         return results
 
     def train_single_model(self, model_name, config, max_epochs=2000, patience=50):
         """Train a single model with custom parameters"""
         logger.info(f"🏗️  Architecture: {config['type']}")
         logger.info(f"⚙️  Parameters: {config['params']}")
-        
-        # Load Alpha data
-        X, y, metadata = self.load_and_prepare_data_alpha()
-        input_size = X.shape[2]
-        
-        # Extract metadata for batch processing
-        vol = torch.ones_like(y) * 0.02  # Default volatility estimate
-        ticker_ids = torch.zeros(len(y), dtype=torch.long)  # Placeholder for ticker IDs
-        
-        # Time-aware split
-        X_train, X_val, y_train, y_val, vol_train, vol_val = self._time_split_by_ticker(
-            X, y, vol, ticker_ids, val_frac=0.2
-        )
-        
-        # Create data loaders
-        train_dataset = TensorDataset(X_train, y_train, vol_train)
-        val_dataset = TensorDataset(X_val, y_val, vol_val)
-        batch_size = 8 if torch.cuda.is_available() else 16  # Reduced for stability
-        pin_mem = torch.cuda.is_available()
-        
-        train_loader = DataLoader(
-            train_dataset, batch_size=batch_size, shuffle=True,
-            num_workers=0, pin_memory=pin_mem, persistent_workers=False
-        )
-        val_loader = DataLoader(
-            val_dataset, batch_size=batch_size, shuffle=False,
-            num_workers=0, pin_memory=pin_mem, persistent_workers=False
-        )
-        
-        # Create model
-        model = create_advanced_model(config['type'], input_size, **config['params']).to(self.device)
-        
-        # Train with custom parameters
-        return self.train_model_custom(model, train_loader, val_loader, model_name, epochs=max_epochs, patience=patience)
+
+        with mlflow.start_run(run_name=model_name, nested=True):
+            mlflow.log_param("model_type", config['type'])
+            mlflow.log_params(config['params'])
+
+            # Load Alpha data
+            X, y, metadata = self.load_and_prepare_data_alpha()
+            input_size = X.shape[2]
+
+            # Extract metadata for batch processing
+            vol = torch.ones_like(y) * 0.02  # Default volatility estimate
+            ticker_ids = torch.zeros(len(y), dtype=torch.long)  # Placeholder for ticker IDs
+
+            # Time-aware split
+            X_train, X_val, y_train, y_val, vol_train, vol_val = self._time_split_by_ticker(
+                X, y, vol, ticker_ids, val_frac=0.2
+            )
+
+            # Create data loaders
+            train_dataset = TensorDataset(X_train, y_train, vol_train)
+            val_dataset = TensorDataset(X_val, y_val, vol_val)
+            batch_size = 8 if torch.cuda.is_available() else 16  # Reduced for stability
+            pin_mem = torch.cuda.is_available()
+
+            train_loader = DataLoader(
+                train_dataset, batch_size=batch_size, shuffle=True,
+                num_workers=0, pin_memory=pin_mem, persistent_workers=False
+            )
+            val_loader = DataLoader(
+                val_dataset, batch_size=batch_size, shuffle=False,
+                num_workers=0, pin_memory=pin_mem, persistent_workers=False
+            )
+
+            # Create model
+            model = create_advanced_model(config['type'], input_size, **config['params']).to(self.device)
+
+            # Train with custom parameters
+            result = self.train_model_custom(model, train_loader, val_loader, model_name, epochs=max_epochs, patience=patience)
+            if result:
+                mlflow.log_metric("best_val_loss", result['best_val_loss'])
+                mlflow.log_metric("final_val_acc", result['final_val_acc'])
+            return result
 
     def train_model_custom(self, model, train_loader, val_loader, model_name, epochs=2000, patience=50):
         """Modified train_model that accepts custom epochs and patience"""
@@ -1194,6 +1258,13 @@ class AdvancedTrainer:
             val_losses.append(epoch_val_loss)
             train_accuracies.append(epoch_train_acc)
             val_accuracies.append(epoch_val_acc)
+
+            mlflow.log_metrics({
+                "train_loss": epoch_train_loss,
+                "val_loss": epoch_val_loss,
+                "train_acc": epoch_train_acc,
+                "val_acc": epoch_val_acc
+            }, step=epoch + 1)
             
             # Log progress
             if epoch % 10 == 0 or epoch == epochs - 1:
@@ -1239,6 +1310,12 @@ class AdvancedTrainer:
         
         # Return results
         if best_model_state is not None and train_losses and val_losses:
+            try:
+                best_ckpt = f"{self.exp_dir}/checkpoints/best_{model_name}.pth"
+                if os.path.exists(best_ckpt):
+                    mlflow.log_artifact(best_ckpt, artifact_path=model_name)
+            except Exception as e:
+                logger.warning(f"MLflow artifact logging failed: {e}")
             return {
                 'best_val_loss': best_val_loss,
                 'final_train_loss': train_losses[-1],
@@ -1343,7 +1420,14 @@ class AdvancedTrainer:
                 json.dump(existing_results, f, indent=2)
             
             logger.info(f"📊 Results saved to {results_file}")
-        
+            try:
+                mlflow.log_artifact(results_file)
+            except Exception as e:
+                logger.warning(f"MLflow artifact logging failed: {e}")
+
+        if mlflow.active_run():
+            mlflow.end_run()
+
         return results
 
     # ----------------------- Check status --------------------------
@@ -1462,7 +1546,10 @@ def main():
     )
 
     if args.check:
-        return trainer.check_models_status()
+        result = trainer.check_models_status()
+        if mlflow.active_run():
+            mlflow.end_run()
+        return result
 
     # If specific models requested, train only those
     if args.model:
