@@ -146,6 +146,16 @@ NEWS_API_KEY=your_news_key              # News sentiment
 - **Risk**: Monitor exposure and loss limits
 - **Data**: Verify daily fetch success
 
+## 📘 Runbooks
+
+Operational playbooks for common scenarios are available in [PRODUCTION/docs/runbooks](PRODUCTION/docs/runbooks):
+
+- [Missing Data](PRODUCTION/docs/runbooks/missing_data.md)
+- [Partial Fills](PRODUCTION/docs/runbooks/partial_fills.md)
+- [Rate-Limit Errors](PRODUCTION/docs/runbooks/rate_limit_errors.md)
+- [Off-Calendar Openings](PRODUCTION/docs/runbooks/off_calendar_openings.md)
+- [Safe Shutdown & Resume](PRODUCTION/docs/runbooks/safe_shutdown_resume.md)
+
 ---
 
 ## 📊 Performance Validation
