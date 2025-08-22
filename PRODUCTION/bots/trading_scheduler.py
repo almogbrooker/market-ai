@@ -9,7 +9,10 @@ import time
 import logging
 import json
 from pathlib import Path
-from datetime import datetime, time as dt_time
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import pandas as pd
+import pandas_market_calendars as mcal
 import subprocess
 import sys
 import os
@@ -20,7 +23,11 @@ class TradingScheduler:
     def __init__(self, paper_trading=True):
         self.paper_trading = paper_trading
         self.logger = self.setup_logging()
-        
+
+        # Timezone and exchange calendar
+        self.tz = ZoneInfo("America/New_York")
+        self.calendar = mcal.get_calendar("NYSE")
+
         # Trading schedule (EST/EDT times)
         self.schedule_config = {
             "retrain_time": "06:00",      # 6:00 AM - Before market open
@@ -28,7 +35,7 @@ class TradingScheduler:
             "trade_time": "09:45",        # 9:45 AM - After market open
             "monitor_time": "16:15",      # 4:15 PM - After market close
         }
-        
+
         self.max_retries = 3
         self.retry_delay = 300  # 5 minutes
         
@@ -47,9 +54,25 @@ class TradingScheduler:
         )
         return logging.getLogger('TradingScheduler')
     
-    def is_trading_day(self):
-        """Check if today is a trading day (weekday)"""
-        return datetime.now().weekday() < 5  # Monday=0, Friday=4
+    def now(self):
+        """Current time in America/New_York"""
+        return datetime.now(self.tz)
+
+    def is_trading_day(self, dt=None):
+        """Check if a given date is a trading day"""
+        dt = dt or self.now()
+        schedule = self.calendar.schedule(start_date=dt.date(), end_date=dt.date())
+        return not schedule.empty
+
+    def is_market_open(self, dt=None):
+        """Check if the market is currently open"""
+        dt = dt or self.now()
+        schedule = self.calendar.schedule(start_date=dt.date(), end_date=dt.date())
+        if schedule.empty:
+            return False
+        market_open = schedule.loc[dt.date(), "market_open"].tz_convert(self.tz)
+        market_close = schedule.loc[dt.date(), "market_close"].tz_convert(self.tz)
+        return market_open <= pd.Timestamp(dt) <= market_close
     
     def run_with_retries(self, func, task_name, max_retries=None):
         """Run a task with retry logic"""
@@ -135,22 +158,25 @@ class TradingScheduler:
     
     def run_trading_cycle(self):
         """Execute trading cycle"""
+        if not self.is_market_open():
+            self.logger.info("⏰ Market closed - skipping trading cycle")
+            return True
         try:
             # Set environment variable for paper trading
             env = os.environ.copy()
             env['PAPER_TRADING'] = str(self.paper_trading)
-            
+
             result = subprocess.run([
                 sys.executable, "PRODUCTION/bots/alpaca_trader.py"
             ], capture_output=True, text=True, timeout=1200, env=env)  # 20 minute timeout
-            
+
             if result.returncode == 0:
                 self.logger.info("✅ Trading cycle completed")
                 return True
             else:
                 self.logger.error(f"❌ Trading failed: {result.stderr}")
                 return False
-                
+
         except subprocess.TimeoutExpired:
             self.logger.error("❌ Trading timed out after 20 minutes")
             return False
@@ -211,7 +237,10 @@ class TradingScheduler:
         if not self.is_trading_day():
             self.logger.info("📅 Non-trading day, skipping trading")
             return
-        
+        if not self.is_market_open():
+            self.logger.info("⏰ Market closed, skipping trading")
+            return
+
         self.logger.info("🎯 TRADING JOB STARTED")
         success = self.run_with_retries(self.run_trading_cycle, "Trading Cycle")
         
@@ -234,7 +263,7 @@ class TradingScheduler:
     
     def send_alert(self, message):
         """Send alert notification"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = self.now().strftime("%Y-%m-%d %H:%M:%S")
         alert_msg = f"[{timestamp}] TRADING SYSTEM ALERT: {message}"
         
         # Log alert

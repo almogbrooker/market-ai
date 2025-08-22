@@ -91,6 +91,7 @@ pymc==5.15.0                     # Probabilistic modeling (optional)
 python-dateutil==2.9.0.post0     # Date utilities
 pytz==2024.1                     # Timezone handling
 holidays==0.49                   # Holiday calendars
+pandas-market-calendars==4.4.4    # Exchange trading calendars
 
 # === OPTIMIZATION UTILITIES ===
 hyperopt==0.2.7                  # Alternative hyperparameter optimization
