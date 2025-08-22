@@ -145,6 +145,7 @@ NEWS_API_KEY=your_news_key              # News sentiment
 - **Performance**: Track IC and conformal gate metrics
 - **Risk**: Monitor exposure and loss limits
 - **Data**: Verify daily fetch success
+- **Dashboard**: `streamlit run PRODUCTION/tools/trading_dashboard.py`
 
 ---
 
