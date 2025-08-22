@@ -15,6 +15,7 @@ import logging
 from datetime import datetime, timedelta
 import time
 import warnings
+from utils.intent_hash import compute_intent_hash
 from monitoring import (
     LATENCY,
     GROSS_EXPOSURE,
@@ -374,7 +375,7 @@ class AlpacaProductionTrader:
             for _, signal in target_signals.iterrows():
                 symbol = signal['ticker']
                 prediction = signal['prediction']
-                
+
                 # Determine trade direction and size
                 if prediction > 0:
                     side = OrderSide.BUY
@@ -385,9 +386,18 @@ class AlpacaProductionTrader:
                 position_value = portfolio_value * self.risk_limits["max_position_size"]
                 current_price = signal['Close']
                 qty = int(position_value / current_price)
-                
+
                 if qty < 1:
                     continue
+
+                # Compute intent hash using rounded prediction
+                intent_hash = compute_intent_hash({
+                    "symbol": symbol,
+                    "prediction": round(float(prediction), 4),
+                    "side": side.value if hasattr(side, "value") else str(side),
+                    "position_size": self.risk_limits["max_position_size"],
+                })
+                self.logger.info(f"Intent hash for {symbol}: {intent_hash}")
                 
                 # Submit order
                 try:
