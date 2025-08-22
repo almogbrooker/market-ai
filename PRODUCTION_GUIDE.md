@@ -172,3 +172,11 @@ python PRODUCTION/tools/fix_conformal_gate.py
 
 🏛️ **INSTITUTIONAL-GRADE AI TRADING SYSTEM**  
 Ready for production deployment and 6-month live validation period.
+
+## 🔄 Failover & Restart Procedures
+- Run the supervisor with `python trading_supervisor.py` to ensure a single instance of the trading system.
+- If the system stops unexpectedly:
+  1. Inspect `supervisor.lock` and `trading_system.lock` to confirm processes are not running.
+  2. Remove stale lock files and restart the supervisor.
+  3. Review logs under `PRODUCTION/logs/` for root-cause analysis.
+- Cron or future orchestration tools (Prefect/Airflow) can be used to re-launch the supervisor as needed.
