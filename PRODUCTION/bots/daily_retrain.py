@@ -19,6 +19,7 @@ from sklearn.preprocessing import RobustScaler
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import TimeSeriesSplit
+from src.utils.artifacts import save_model_artifacts
 
 class DailyRetrainer:
     """Automated daily model retraining system"""
@@ -293,8 +294,6 @@ class DailyRetrainer:
     def save_retrained_model(self, model, scaler, gate_config, feature_list, dates):
         """Save the retrained model"""
         self.logger.info("💾 Saving retrained model")
-
-        from src.utils.artifacts import save_model_artifacts
 
         training_meta = {
             "data_range": {
