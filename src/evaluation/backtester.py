@@ -118,6 +118,10 @@ class Backtester:
         
         # Portfolio parameters
         self.capital = capital
+
+        # Geometric compounding setup
+        equity_curve = [1.0]
+        daily_returns = []
         self.max_positions = max_positions
         self.min_confidence = min_confidence
         self.lookback_days = lookback_days
@@ -485,6 +489,22 @@ class Backtester:
         return total_value
     
     def _calculate_metrics(self, results: Dict) -> Dict:
+        # Build equity curve (geometric compounding) from daily returns if available
+        equity_curve = results.get('equity_curve')
+        daily_returns = results.get('daily_returns')
+        if daily_returns is None or equity_curve is None:
+            tdf = results.get('trades')
+            if tdf is not None and hasattr(tdf, 'groupby'):
+                # aggregate simple daily return proxy from trades
+                dly = tdf.groupby('date')['return_pct'].mean().fillna(0).values
+                daily_returns = dly
+                eq = [1.0]
+                for r in dly:
+                    eq.append(eq[-1] * (1.0 + r))
+                equity_curve = eq
+            else:
+                daily_returns = []
+                equity_curve = [1.0]
         """Calculate performance metrics"""
         
         logger.info("📊 Calculating performance metrics...")
@@ -506,8 +526,7 @@ class Backtester:
         portfolio_df['daily_return'] = portfolio_df['portfolio_value'].pct_change()
         
         # Total return
-        total_return = (results['final_value'] - self.capital) / self.capital * 100
-        
+        total_return = float(equity_curve[-1] - 1.0) * 100 if equity_curve else 0.0
         # Sharpe ratio
         daily_returns = portfolio_df['daily_return'].dropna()
         if len(daily_returns) > 0 and daily_returns.std() > 0:
@@ -518,7 +537,9 @@ class Backtester:
         # Maximum drawdown
         portfolio_df['running_max'] = portfolio_df['portfolio_value'].expanding().max()
         portfolio_df['drawdown'] = (portfolio_df['portfolio_value'] - portfolio_df['running_max']) / portfolio_df['running_max']
-        max_drawdown = portfolio_df['drawdown'].min() * 100
+        peaks = np.maximum.accumulate(np.array(equity_curve)) if equity_curve else np.array([1.0])
+        drawdowns = (np.array(equity_curve) / peaks) - 1.0
+        max_drawdown = float(drawdowns.min()) * 100
         
         # Win rate
         winning_trades = len(trades_df[trades_df['pnl'] > 0])
@@ -532,6 +553,8 @@ class Backtester:
         exit_reasons = trades_df['exit_reason'].value_counts()
         
         metrics = {
+            'equity_curve': equity_curve,
+            'daily_returns': daily_returns,
             'total_return': total_return,
             'sharpe_ratio': sharpe_ratio,
             'max_drawdown': max_drawdown,

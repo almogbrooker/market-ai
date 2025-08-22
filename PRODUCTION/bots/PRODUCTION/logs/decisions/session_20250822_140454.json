@@ -1,0 +1,105 @@
+{
+  "session_id": "20250822_140454",
+  "start_time": "2025-08-22T14:04:54.623283",
+  "decisions": [],
+  "liquidations": [
+    {
+      "timestamp": "2025-08-22T14:04:54.858828",
+      "action": "LIQUIDATE",
+      "symbol": "AAPL",
+      "current_qty": 50,
+      "current_side": "long",
+      "market_value": 8500.0,
+      "unrealized_pl": 250.0,
+      "reason": "Daily reset - liquidate all positions before new signals",
+      "decision_context": {
+        "strategy": "Daily portfolio reset",
+        "rule": "Liquidate all positions before new signals",
+        "confidence": 1.0
+      }
+    },
+    {
+      "timestamp": "2025-08-22T14:04:54.858894",
+      "action": "LIQUIDATE",
+      "symbol": "NVDA",
+      "current_qty": 25,
+      "current_side": "long",
+      "market_value": 12750.0,
+      "unrealized_pl": -125.0,
+      "reason": "Daily reset - liquidate all positions before new signals",
+      "decision_context": {
+        "strategy": "Daily portfolio reset",
+        "rule": "Liquidate all positions before new signals",
+        "confidence": 1.0
+      }
+    },
+    {
+      "timestamp": "2025-08-22T14:04:54.858931",
+      "action": "LIQUIDATE",
+      "symbol": "TSLA",
+      "current_qty": 30,
+      "current_side": "long",
+      "market_value": 7200.0,
+      "unrealized_pl": 450.0,
+      "reason": "Daily reset - liquidate all positions before new signals",
+      "decision_context": {
+        "strategy": "Daily portfolio reset",
+        "rule": "Liquidate all positions before new signals",
+        "confidence": 1.0
+      }
+    }
+  ],
+  "orders": [
+    {
+      "timestamp": "2025-08-22T14:04:54.858841",
+      "symbol": "AAPL",
+      "side": "SELL",
+      "quantity": 50,
+      "price": 170.0,
+      "order_type": "market",
+      "estimated_value": 8500.0,
+      "decision_context": {
+        "execution_strategy": "Market order for immediate fill",
+        "timing": "During trading hours",
+        "liquidity_check": "Assumed sufficient for large-cap stocks"
+      }
+    },
+    {
+      "timestamp": "2025-08-22T14:04:54.858899",
+      "symbol": "NVDA",
+      "side": "SELL",
+      "quantity": 25,
+      "price": 510.0,
+      "order_type": "market",
+      "estimated_value": 12750.0,
+      "decision_context": {
+        "execution_strategy": "Market order for immediate fill",
+        "timing": "During trading hours",
+        "liquidity_check": "Assumed sufficient for large-cap stocks"
+      }
+    },
+    {
+      "timestamp": "2025-08-22T14:04:54.858935",
+      "symbol": "TSLA",
+      "side": "SELL",
+      "quantity": 30,
+      "price": 240.0,
+      "order_type": "market",
+      "estimated_value": 7200.0,
+      "decision_context": {
+        "execution_strategy": "Market order for immediate fill",
+        "timing": "During trading hours",
+        "liquidity_check": "Assumed sufficient for large-cap stocks"
+      }
+    }
+  ],
+  "errors": [],
+  "end_time": "2025-08-22T14:04:54.858971",
+  "total_orders_executed": 3,
+  "summary": {
+    "liquidations_count": 3,
+    "orders_count": 3,
+    "errors_count": 0,
+    "decisions_count": 0
+  }
+}

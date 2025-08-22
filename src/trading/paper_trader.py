@@ -31,7 +31,7 @@ class PaperTrader:
     
     def __init__(self, model_dir: str, max_gross: float = 0.6, max_per_name: float = 0.08,
                  api_key: str = None, secret_key: str = None, base_url: str = None,
-                 exec_next_bar: bool = True, alpha: float = 0.15, daily_loss_limit: float = 0.03):
+                  exec_next_bar: bool = True, daily_loss_limit: float = 0.03, alpha: float = 0.15, artifacts: dict | None = None):
         
         self.model_dir = Path(model_dir)
         self.max_gross = max_gross  # Maximum gross exposure
