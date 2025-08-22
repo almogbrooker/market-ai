@@ -83,10 +83,10 @@ class DriftMonitor:
             with open(self.model_dir / "config.json", 'r') as f:
                 config = json.load(f)
             
-            with open(self.model_dir / "features.json", 'r') as f:
+            with open(self.model_dir / "feature_list.json", 'r') as f:
                 features = json.load(f)
-            
-            preprocessing = joblib.load(self.model_dir / "preprocessing.pkl")
+
+            preprocessing = joblib.load(self.model_dir / "scaler.joblib")
             
             # Create model
             model_config = config['size_config']
@@ -272,7 +272,7 @@ class DriftMonitor:
         print("-" * 30)
         
         # Load feature list
-        with open(self.model_dir / "features.json", 'r') as f:
+        with open(self.model_dir / "feature_list.json", 'r') as f:
             features = json.load(f)
         
         feature_stats = {}

@@ -34,7 +34,8 @@ class DailyRetrainer:
             "validation_split": 0.2,   # 20% validation
             "patience": 10,            # Early stopping patience
             "max_epochs": 50,          # Maximum training epochs
-            "learning_rate": 0.001     # Learning rate
+            "learning_rate": 0.001,    # Learning rate
+            "random_seed": 42          # Reproducibility
         }
         
     def setup_logging(self):
@@ -89,7 +90,7 @@ class DailyRetrainer:
         
         try:
             # Load current features
-            with open(self.model_dir / "features.json", 'r') as f:
+            with open(self.model_dir / "feature_list.json", 'r') as f:
                 features = json.load(f)
             
             # Target column
@@ -127,6 +128,10 @@ class DailyRetrainer:
         self.logger.info("🧠 Training model with fresh data")
         
         try:
+            # Set random seeds for reproducibility
+            torch.manual_seed(self.training_config["random_seed"])
+            np.random.seed(self.training_config["random_seed"])
+
             # Load current model configuration
             with open(self.model_dir / "config.json", 'r') as f:
                 config = json.load(f)
@@ -285,43 +290,32 @@ class DailyRetrainer:
             self.logger.error(f"❌ Gate recalibration failed: {e}")
             return None
     
-    def save_retrained_model(self, model, preprocessing, gate_config, features):
+    def save_retrained_model(self, model, scaler, gate_config, feature_list, dates):
         """Save the retrained model"""
         self.logger.info("💾 Saving retrained model")
-        
+
+        from src.utils.artifacts import save_model_artifacts
+
+        training_meta = {
+            "data_range": {
+                "start": str(dates.min()),
+                "end": str(dates.max()),
+            },
+            "random_seed": self.training_config["random_seed"],
+            "training_params": self.training_config,
+        }
+
         try:
-            # Create backup of current model
-            backup_dir = self.model_dir.parent / f"model_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            backup_dir.mkdir(exist_ok=True)
-            
-            # Backup current files
-            for file_name in ["model.pt", "preprocessing.pkl", "gate.json", "config.json", "features.json"]:
-                src = self.model_dir / file_name
-                if src.exists():
-                    import shutil
-                    shutil.copy(src, backup_dir / file_name)
-            
-            # Save new model
-            torch.save(model.state_dict(), self.model_dir / "model.pt")
-            joblib.dump(preprocessing, self.model_dir / "preprocessing.pkl")
-            
-            with open(self.model_dir / "gate.json", 'w') as f:
-                json.dump(gate_config, f, indent=2)
-            
-            # Update metadata
-            metadata = {
-                "retrained_date": datetime.now().isoformat(),
-                "backup_location": str(backup_dir),
-                "training_samples": len(features) if hasattr(features, '__len__') else 0
-            }
-            
-            with open(self.model_dir / "retrain_metadata.json", 'w') as f:
-                json.dump(metadata, f, indent=2)
-            
+            backup_dir = save_model_artifacts(
+                self.model_dir,
+                model,
+                scaler,
+                feature_list,
+                gate_config,
+                training_meta,
+            )
             self.logger.info(f"✅ Model saved successfully. Backup: {backup_dir}")
-            
             return True
-            
         except Exception as e:
             self.logger.error(f"❌ Failed to save model: {e}")
             return False
@@ -352,7 +346,7 @@ class DailyRetrainer:
                 return False
             
             # 5. Save retrained model
-            if not self.save_retrained_model(model, preprocessing, gate_config, X.columns.tolist()):
+            if not self.save_retrained_model(model, preprocessing, gate_config, X.columns.tolist(), dates):
                 return False
             
             self.logger.info("✅ DAILY RETRAINING COMPLETED SUCCESSFULLY")

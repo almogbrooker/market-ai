@@ -24,10 +24,10 @@ def load_model_and_predict(model_dir, data_df):
     with open(model_dir / "config.json", 'r') as f:
         config = json.load(f)
     
-    with open(model_dir / "features.json", 'r') as f:
+    with open(model_dir / "feature_list.json", 'r') as f:
         features = json.load(f)
-    
-    preprocessing = joblib.load(model_dir / "preprocessing.pkl")
+
+    preprocessing = joblib.load(model_dir / "scaler.joblib")
     
     # Create model
     model_config = config['size_config']

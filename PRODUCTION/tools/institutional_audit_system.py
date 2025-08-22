@@ -45,10 +45,11 @@ class InstitutionalAuditor:
         # Check required files
         required_files = {
             "model.pt": model_dir / "model.pt",
-            "preprocessing.pkl": model_dir / "preprocessing.pkl", 
-            "features.json": model_dir / "features.json",
+            "scaler.joblib": model_dir / "scaler.joblib",
+            "feature_list.json": model_dir / "feature_list.json",
             "gate.json": model_dir / "gate.json",
-            "config.json": model_dir / "config.json"
+            "config.json": model_dir / "config.json",
+            "model_card.json": model_dir / "model_card.json"
         }
         
         for name, path in required_files.items():
@@ -102,9 +103,9 @@ class InstitutionalAuditor:
                 results["issues"].append("❌ Gate missing required configuration")
                 results["status"] = "FAIL"
         
-        # Validate features.json
-        if (model_dir / "features.json").exists():
-            with open(model_dir / "features.json", 'r') as f:
+        # Validate feature list
+        if (model_dir / "feature_list.json").exists():
+            with open(model_dir / "feature_list.json", 'r') as f:
                 features = json.load(f)
             
             feature_count = len(features)
@@ -679,10 +680,10 @@ class InstitutionalAuditor:
         with open(model_dir / "config.json", 'r') as f:
             config = json.load(f)
         
-        with open(model_dir / "features.json", 'r') as f:
+        with open(model_dir / "feature_list.json", 'r') as f:
             features = json.load(f)
-        
-        preprocessing = joblib.load(model_dir / "preprocessing.pkl")
+
+        preprocessing = joblib.load(model_dir / "scaler.joblib")
         
         # Create model
         model_config = config['size_config']

@@ -33,6 +33,6 @@
     "model": "/home/almog/market-ai/models/202508/model.xgb",
     "scaler": "/home/almog/market-ai/models/202508/scaler.joblib",
     "gate": "/home/almog/market-ai/models/202508/gate.json",
-    "features": "/home/almog/market-ai/models/202508/features.json"
+    "features": "/home/almog/market-ai/models/202508/feature_list.json"
   }
 }

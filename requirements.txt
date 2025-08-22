@@ -1,0 +1,17 @@
+# Runtime dependencies with pinned versions
+torch==2.2.1
+pandas==2.2.2
+numpy==1.26.4
+scipy==1.13.1
+scikit-learn==1.4.2
+joblib==1.4.2
+requests==2.32.3
+aiohttp==3.9.5
+alpaca-py==0.27.0
+yfinance==0.2.28
+python-dotenv==1.0.1
+pydantic==2.7.4
+dynaconf==3.2.5
+loguru==0.7.2
+rich==13.7.1
+tqdm==4.66.4

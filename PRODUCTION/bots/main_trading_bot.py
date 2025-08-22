@@ -54,13 +54,13 @@ class ProductionTradingBot:
             with open(self.model_path / "config.json", 'r') as f:
                 config = json.load(f)
             
-            with open(self.model_path / "features.json", 'r') as f:
+            with open(self.model_path / "feature_list.json", 'r') as f:
                 self.features = json.load(f)
             
             with open(self.model_path / "gate.json", 'r') as f:
                 self.gate_config = json.load(f)
             
-            self.preprocessing = joblib.load(self.model_path / "preprocessing.pkl")
+            self.preprocessing = joblib.load(self.model_path / "scaler.joblib")
             
             # Create model
             import sys

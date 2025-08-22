@@ -61,7 +61,7 @@ cat latest_audit_report.json           # View latest results
 - ✅ **8/8 audits passed** (100% success rate)
 - ✅ **No data leakage** detected
 - ✅ **Proper cross-validation** (PurgedKFold + temporal)
-- ✅ **Production-ready artifacts** (model.pt, preprocessing.pkl, etc.)
+- ✅ **Production-ready artifacts** (model.pt, scaler.joblib, feature_list.json, gate.json)
 - ✅ **Risk management** integrated
 - ✅ **Drift monitoring** implemented
 

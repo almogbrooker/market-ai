@@ -42,8 +42,8 @@ def apply_conformal_gate(predictions, gate_config):
 def load_pytorch_model(model_dir):
     """Load PyTorch model from institutional testing results"""
     model_file = model_dir / "model.pt"
-    features_file = model_dir / "features.json"
-    preprocessing_file = model_dir / "preprocessing.pkl"
+    features_file = model_dir / "feature_list.json"
+    preprocessing_file = model_dir / "scaler.joblib"
     gate_file = model_dir / "gate.json"
     config_file = model_dir / "config.json"
     
