@@ -30,8 +30,15 @@ class ProductionTradingBot:
             "baseline_gross_exposure": 0.33,  # 33% baseline gross
             "max_gross_exposure": 0.60,  # 60% emergency max gross
             "daily_loss_limit": 0.02,   # 2% daily loss limit
-            "min_confidence": 0.15      # Minimum gate acceptance
+            "min_confidence": 0.15,     # Minimum gate acceptance
+            "max_notional_exposure": 1.00,  # 100% of equity
+            "var_limit": 0.05,             # 5% one-day VaR limit
+            "var_confidence": 0.95,
+            "var_lookback": 20
         }
+        self.current_notional = 0.0
+        self.pnl_history = []
+        self.trading_halted = False
         
     def setup_logging(self):
         """Setup production logging"""
@@ -164,8 +171,49 @@ class ProductionTradingBot:
         if len(data) == 0:
             self.logger.error("Empty market data")
             return False
-        
+
         return True
+
+    def pre_trade_checks(self, signals_df):
+        """Filter orders based on notional exposure and spread/alpha relation"""
+        if signals_df is None or len(signals_df) == 0:
+            return signals_df
+
+        valid_rows = []
+        for _, row in signals_df.iterrows():
+            size = row["position_size"]
+            notional = abs(size)
+            spread = row.get("spread", 0.0)
+            expected_alpha = abs(row.get("prediction", 0.0))
+            cost = spread * size
+
+            if self.current_notional + notional > self.risk_limits["max_notional_exposure"]:
+                self.logger.warning("Notional exposure cap reached; skipping order")
+                continue
+
+            if cost >= expected_alpha:
+                self.logger.info("Spread cost exceeds expected alpha; skipping order")
+                continue
+
+            valid_rows.append(row)
+
+        if not valid_rows:
+            return pd.DataFrame(columns=signals_df.columns)
+        return pd.DataFrame(valid_rows)
+
+    def update_pnl_and_var(self, pnl):
+        """Update rolling PnL history and check VaR limits"""
+        self.pnl_history.append(pnl)
+        lookback = self.risk_limits["var_lookback"]
+        if len(self.pnl_history) > lookback:
+            self.pnl_history = self.pnl_history[-lookback:]
+
+        if len(self.pnl_history) >= lookback:
+            var_conf = self.risk_limits["var_confidence"]
+            var = np.percentile(self.pnl_history, (1 - var_conf) * 100)
+            if var < -self.risk_limits["var_limit"]:
+                self.logger.error(f"VaR limit exceeded: {var:.4f}")
+                self.trading_halted = True
     
     def apply_risk_management(self, signals_df, current_positions=None):
         """Apply production risk management"""
@@ -187,10 +235,14 @@ class ProductionTradingBot:
         
         # Take top signals (use baseline positions)
         final_signals = signals_df.head(target_positions).copy()
-        
-        self.logger.info(f"Risk management: {len(final_signals)} positions, "
-                        f"gross exposure: {len(final_signals) * self.risk_limits['max_position_size']:.1%}")
-        
+
+        # Additional pre-trade checks
+        final_signals = self.pre_trade_checks(final_signals)
+
+        self.logger.info(
+            f"Risk management: {len(final_signals)} positions, "
+            f"gross exposure: {len(final_signals) * self.risk_limits['max_position_size']:.1%}")
+
         return final_signals
     
     def run_live_trading(self):
@@ -226,12 +278,27 @@ class ProductionTradingBot:
                     
                     if final_signals is not None and len(final_signals) > 0:
                         self.logger.info(f"✅ Generated {len(final_signals)} trading signals")
-                        
-                        # Log top signals
-                        for idx, row in final_signals.head(5).iterrows():
-                            self.logger.info(f"  Signal: {row.get('ticker', 'N/A')} "
-                                           f"pred={row['prediction']:.4f} "
-                                           f"conf={row['confidence']:.2f}")
+
+                        for _, row in final_signals.iterrows():
+                            if self.trading_halted:
+                                self.logger.error("Trading halted due to risk limits")
+                                break
+
+                            notional = row["position_size"]
+                            self.current_notional += notional
+
+                            realized_return = row.get("next_return_1d", 0.0)
+                            pnl = notional * realized_return
+
+                            self.update_pnl_and_var(pnl)
+                            self.current_notional -= notional
+
+                            self.logger.info(
+                                f"  Trade: {row.get('ticker', 'N/A')} pnl={pnl:.4f}")
+
+                            if self.trading_halted:
+                                self.logger.error("Halting trading due to VaR breach")
+                                break
                     else:
                         self.logger.warning("No signals passed risk management")
                 else:
