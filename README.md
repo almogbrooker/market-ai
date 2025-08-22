@@ -20,10 +20,7 @@ python production/live_trading_system.py  # Start live trading
 ## 📊 System Overview
 
 ### **Performance**
-- **Proven Returns**: 14.21% (8 months backtest)
-- **Win Rate**: 100% (5/5 trades successful) 
-- **Alpha**: +0.76% vs QQQ benchmark
-- **Risk-Adjusted**: Institutional validation (10/10 guardrails passed)
+- See [Methodology](reports/methodology.md) for detailed validation metrics and performance evaluation.
 
 ### **Scale**
 - **Universe**: 260 stocks (Russell 1000 Extended)
@@ -150,28 +147,7 @@ NEWS_API_KEY=your_news_key              # News sentiment
 
 ## 📊 Performance Validation
 
-### **Backtesting Results**
-```bash
-# Historical validation (2020-2024)
-Total Return: 14.21%
-Win Rate: 100% (5/5 trades)
-Alpha vs QQQ: +0.76%
-Max Drawdown: -8.2%
-Sharpe Ratio: 1.84
-```
-
-### **Institutional Validation**
-```bash
-# Run complete validation suite
-python tests/test_institutional_guardrails.py
-
-# Results: 10/10 tests passed
-✅ Temporal leakage prevention
-✅ Frozen horizon selection  
-✅ Position sizing constraints
-✅ Transaction cost realism
-✅ Acceptance gates compliance
-```
+Detailed backtesting procedures, institutional guardrail results, transaction cost assumptions, and sensitivity analyses are documented in the [Methodology report](reports/methodology.md).
 
 ---
 
@@ -217,10 +193,10 @@ python tests/test_institutional_guardrails.py
 - One-command universe switching
 - Institutional-grade validation
 
-**✅ Optimized**  
-- 66.3% training IC achieved
+**✅ Optimized**
+- Training and inference pipelines fully automated
 - Conformal prediction gates calibrated
 - Monthly retraining pipeline active
-- Proven 14.21% base performance
+- Historical performance metrics available in the [Methodology report](reports/methodology.md)
 
 **🚀 Ready for institutional deployment!**
