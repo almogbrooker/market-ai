@@ -14,6 +14,7 @@ from pathlib import Path
 import logging
 from datetime import datetime
 import warnings
+from utils.intent_hash import compute_intent_hash
 from monitoring import (
     LATENCY,
     GROSS_EXPOSURE,
@@ -199,9 +200,19 @@ class ProductionTradingBot:
         
         # Use baseline unless emergency conditions (high confidence signals)
         target_positions = baseline_positions
-        
+
         # Take top signals (use baseline positions)
         final_signals = signals_df.head(target_positions).copy()
+
+        # Compute intent hashes with rounded predictions
+        final_signals["intent_hash"] = final_signals.apply(
+            lambda row: compute_intent_hash({
+                "symbol": row.get("ticker"),
+                "prediction": round(float(row["prediction"]), 4),
+                "position_size": row["position_size"],
+            }),
+            axis=1,
+        )
 
         gross_exposure = len(final_signals) * self.risk_limits['max_position_size']
         GROSS_EXPOSURE.set(gross_exposure)
