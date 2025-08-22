@@ -6,12 +6,20 @@ Configuration management for AI Trading Bot
 import os
 import json
 import logging
-from dataclasses import dataclass, asdict, replace
+from dataclasses import asdict, dataclass, field, replace
 from typing import List
-from dotenv import load_dotenv
+
+try:  # pragma: no cover - optional dependency
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover - fallback
+
+    def load_dotenv() -> bool:  # type: ignore
+        return False
+
 
 # Load environment variables
 load_dotenv()
+
 
 @dataclass
 class TradingSettings:
@@ -20,7 +28,11 @@ class TradingSettings:
     # Legacy config for backward compatibility
     start_date: str = "2020-01-01"
     end_date: str = "2024-12-31"
-    tickers: List[str] = ("AAPL,MSFT,GOOG,AMZN,NVDA,TSLA,META,AMD,INTC,QCOM".split(","))
+    tickers: List[str] = field(
+        default_factory=lambda: "AAPL,MSFT,GOOG,AMZN,NVDA,TSLA,META,AMD,INTC,QCOM".split(
+            ","
+        )
+    )
     news_api_key: str = os.environ.get("NEWS_API_KEY", "YOUR_NEWSAPI_KEY_HERE")
 
     # Universe & windows
@@ -84,7 +96,9 @@ class TradingSettings:
             log_dir=os.getenv("LOG_DIR", base.log_dir),
             d_model=int(os.getenv("D_MODEL", base.d_model)),
             nhead=int(os.getenv("NHEAD", base.nhead)),
-            transformer_layers=int(os.getenv("TRANSFORMER_LAYERS", base.transformer_layers)),
+            transformer_layers=int(
+                os.getenv("TRANSFORMER_LAYERS", base.transformer_layers)
+            ),
             gat_hidden=int(os.getenv("GAT_HIDDEN", base.gat_hidden)),
             gat_out=int(os.getenv("GAT_OUT", base.gat_out)),
             dropout=float(os.getenv("DROPOUT", base.dropout)),
@@ -99,6 +113,7 @@ os.makedirs(trading_settings.log_dir, exist_ok=True)
 # Backward compatible alias
 settings = trading_settings
 
+
 class TradingConfig:
     """Centralized configuration management"""
 
@@ -106,53 +121,53 @@ class TradingConfig:
     settings: TradingSettings = trading_settings
 
     # Alpaca API
-    ALPACA_API_KEY: str = os.getenv('ALPACA_API_KEY', '')
-    ALPACA_SECRET_KEY: str = os.getenv('ALPACA_SECRET_KEY', '')
-    ALPACA_ENV: str = os.getenv('ALPACA_ENV', 'paper')  # paper or live
-    
+    ALPACA_API_KEY: str = os.getenv("ALPACA_API_KEY", "")
+    ALPACA_SECRET_KEY: str = os.getenv("ALPACA_SECRET_KEY", "")
+    ALPACA_ENV: str = os.getenv("ALPACA_ENV", "paper")  # paper or live
+
     # Risk Management
-    MAX_GROSS: float = float(os.getenv('MAX_GROSS', '0.95'))
-    DAILY_DD_KILLSWITCH: float = float(os.getenv('DAILY_DD_KILLSWITCH', '-0.03'))
-    MAX_SINGLE_POSITION: float = float(os.getenv('MAX_SINGLE_POSITION', '0.20'))
-    
+    MAX_GROSS: float = float(os.getenv("MAX_GROSS", "0.95"))
+    DAILY_DD_KILLSWITCH: float = float(os.getenv("DAILY_DD_KILLSWITCH", "-0.03"))
+    MAX_SINGLE_POSITION: float = float(os.getenv("MAX_SINGLE_POSITION", "0.20"))
+
     # Trading Parameters
-    MIN_CONFIDENCE: float = float(os.getenv('MIN_CONFIDENCE', '0.95'))
-    MIN_TRADE_VALUE: float = float(os.getenv('MIN_TRADE_VALUE', '100.0'))
-    MAX_OPEN_ORDERS: int = int(os.getenv('MAX_OPEN_ORDERS', '20'))
-    
+    MIN_CONFIDENCE: float = float(os.getenv("MIN_CONFIDENCE", "0.95"))
+    MIN_TRADE_VALUE: float = float(os.getenv("MIN_TRADE_VALUE", "100.0"))
+    MAX_OPEN_ORDERS: int = int(os.getenv("MAX_OPEN_ORDERS", "20"))
+
     # External APIs (Optional)
-    FRED_API_KEY: str = os.getenv('FRED_API_KEY', '')
-    STOCKTWITS_TOKEN: str = os.getenv('STOCKTWITS_TOKEN', '')
-    
+    FRED_API_KEY: str = os.getenv("FRED_API_KEY", "")
+    STOCKTWITS_TOKEN: str = os.getenv("STOCKTWITS_TOKEN", "")
+
     # Logging
-    LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')
-    LOG_FILE: str = os.getenv('LOG_FILE', 'logs/trading_system.log')
-    
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    LOG_FILE: str = os.getenv("LOG_FILE", "logs/trading_system.log")
+
     @classmethod
     def validate_config(cls) -> bool:
         """Validate critical configuration"""
         errors = []
-        
+
         if not cls.ALPACA_API_KEY:
             errors.append("ALPACA_API_KEY is required")
-        
+
         if not cls.ALPACA_SECRET_KEY:
             errors.append("ALPACA_SECRET_KEY is required")
-        
-        if cls.ALPACA_ENV not in ['paper', 'live']:
+
+        if cls.ALPACA_ENV not in ["paper", "live"]:
             errors.append("ALPACA_ENV must be 'paper' or 'live'")
-        
+
         if not 0 < cls.MAX_GROSS <= 1.0:
             errors.append("MAX_GROSS must be between 0 and 1")
-        
+
         if not -1.0 < cls.DAILY_DD_KILLSWITCH < 0:
             errors.append("DAILY_DD_KILLSWITCH must be negative (e.g., -0.03)")
-        
+
         if errors:
             for error in errors:
                 logging.error(f"❌ Config error: {error}")
             return False
-        
+
         logging.info("✅ Configuration validated successfully")
         return True
 
@@ -160,33 +175,34 @@ class TradingConfig:
     def serialize_settings(cls) -> str:
         """Return current dataclass settings as JSON."""
         return cls.settings.to_json()
-    
+
     @classmethod
     def get_base_url(cls) -> str:
         """Get Alpaca API base URL"""
-        return 'https://paper-api.alpaca.markets' if cls.ALPACA_ENV == 'paper' else 'https://api.alpaca.markets'
-    
+        return (
+            "https://paper-api.alpaca.markets"
+            if cls.ALPACA_ENV == "paper"
+            else "https://api.alpaca.markets"
+        )
+
     @classmethod
     def is_paper_trading(cls) -> bool:
         """Check if using paper trading"""
-        return cls.ALPACA_ENV == 'paper'
-    
+        return cls.ALPACA_ENV == "paper"
+
     @classmethod
     def setup_logging(cls):
         """Setup logging configuration"""
         log_dir = os.path.dirname(cls.LOG_FILE)
         if log_dir:
             os.makedirs(log_dir, exist_ok=True)
-        
+
         logging.basicConfig(
             level=getattr(logging, cls.LOG_LEVEL.upper()),
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(cls.LOG_FILE),
-                logging.StreamHandler()
-            ]
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            handlers=[logging.FileHandler(cls.LOG_FILE), logging.StreamHandler()],
         )
-    
+
     @classmethod
     def print_config(cls):
         """Print current configuration (hiding secrets)"""
@@ -202,6 +218,7 @@ class TradingConfig:
         print(f"Max Open Orders: {cls.MAX_OPEN_ORDERS}")
         print(f"Log Level: {cls.LOG_LEVEL}")
         print("=" * 40)
+
 
 # Global config instance
 config = TradingConfig()
