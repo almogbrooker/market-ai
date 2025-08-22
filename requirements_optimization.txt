@@ -1,0 +1,2 @@
+# Deprecated: use requirements.txt and requirements-train.txt instead
+-r requirements-train.txt
