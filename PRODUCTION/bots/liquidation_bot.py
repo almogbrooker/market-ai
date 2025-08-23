@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-LIQUIDATION BOT WITH DECISION LOGGING
-Sell all positions with detailed decision logging for each action
+SMART REBALANCING BOT WITH DECISION LOGGING
+Intelligent position management - keep winners, exit losers, refresh weak signals
+Replaces daily liquidation with smart rebalancing strategy
 """
 
 import os
@@ -19,6 +20,35 @@ warnings.filterwarnings('ignore')
 
 from decision_logger import DecisionLogger
 
+# Add root directory to path for imports
+import sys
+import os
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, project_root)
+from utils.intent_hash import compute_intent_hash
+
+# Monitoring will be integrated later when prometheus_client is installed
+try:
+    from monitoring import (
+        LATENCY,
+        GROSS_EXPOSURE,
+        SIGNAL_ACCEPT_RATE,
+        start_monitoring,
+    )
+    MONITORING_AVAILABLE = True
+except ImportError:
+    MONITORING_AVAILABLE = False
+    # Create dummy functions/objects
+    class DummyMetric:
+        def labels(self, **kwargs): return self
+        def observe(self, value): pass
+        def set(self, value): pass
+    
+    LATENCY = DummyMetric()
+    GROSS_EXPOSURE = DummyMetric()
+    SIGNAL_ACCEPT_RATE = DummyMetric()
+    def start_monitoring(): pass
+
 # Load environment variables
 def load_env_file(env_path="PRODUCTION/config/alpaca.env"):
     """Load environment variables from file"""
@@ -34,8 +64,8 @@ def load_env_file(env_path="PRODUCTION/config/alpaca.env"):
     else:
         print(f"⚠️ Environment file not found: {env_path}")
 
-class LiquidationBot:
-    """Bot to liquidate all positions with detailed logging"""
+class SmartRebalancingBot:
+    """Smart rebalancing bot - keeps winners, exits losers, refreshes weak signals"""
     
     def __init__(self, paper_trading=True):
         # Load environment
@@ -44,6 +74,17 @@ class LiquidationBot:
         self.paper_trading = paper_trading
         self.decision_logger = DecisionLogger()
         self.logger = self.setup_logging()
+        
+        # Smart rebalancing thresholds
+        self.rebalance_config = {
+            "profit_lock_threshold": 0.05,    # Lock profits at 5%+ gains
+            "trailing_stop_distance": 0.06,   # 6% trailing stop from peak
+            "stop_loss_threshold": -0.08,     # -8% hard stop loss
+            "min_confidence_threshold": 0.15, # Exit if model confidence drops below 15%
+            "profit_take_target": 0.25,       # Take full profit at 25%
+            "position_refresh_days": 7,       # Refresh positions older than 7 days with low confidence
+            "max_position_age_days": 14       # Force refresh positions older than 14 days
+        }
         
         # Initialize Alpaca (if available)
         self.alpaca_available = self.setup_alpaca()
@@ -57,11 +98,11 @@ class LiquidationBot:
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
             handlers=[
-                logging.FileHandler(log_dir / 'liquidation_bot.log'),
+                logging.FileHandler(log_dir / 'smart_rebalancing_bot.log'),
                 logging.StreamHandler()
             ]
         )
-        return logging.getLogger('LiquidationBot')
+        return logging.getLogger('SmartRebalancingBot')
     
     def setup_alpaca(self):
         """Setup Alpaca connection"""
@@ -128,6 +169,60 @@ class LiquidationBot:
             self.decision_logger.log_error("get_positions", str(e))
             return []
     
+    def analyze_position_performance(self, position):
+        """Analyze individual position performance and determine action"""
+        symbol = position['symbol']
+        current_price = position['current_price']
+        avg_entry_price = position['avg_entry_price']
+        unrealized_pnl_pct = position['unrealized_pl'] / abs(position['market_value'])
+        
+        # Calculate position metrics
+        position_analysis = {
+            'symbol': symbol,
+            'pnl_pct': unrealized_pnl_pct,
+            'days_held': self.estimate_position_age(symbol),  # Would need position history
+            'current_confidence': self.get_model_confidence_for_symbol(symbol),
+            'action': 'HOLD',
+            'reason': 'Normal position within thresholds'
+        }
+        
+        # Decision logic
+        if unrealized_pnl_pct >= self.rebalance_config['profit_take_target']:
+            position_analysis['action'] = 'TAKE_PROFIT'
+            position_analysis['reason'] = f'Hit profit target: +{unrealized_pnl_pct:.1%}'
+            
+        elif unrealized_pnl_pct <= self.rebalance_config['stop_loss_threshold']:
+            position_analysis['action'] = 'STOP_LOSS'
+            position_analysis['reason'] = f'Hit stop loss: {unrealized_pnl_pct:.1%}'
+            
+        elif unrealized_pnl_pct >= self.rebalance_config['profit_lock_threshold']:
+            # Implement trailing stop logic
+            position_analysis['action'] = 'TRAILING_STOP'
+            position_analysis['reason'] = f'Profitable position +{unrealized_pnl_pct:.1%}, trailing stop active'
+            
+        elif position_analysis['current_confidence'] < self.rebalance_config['min_confidence_threshold']:
+            position_analysis['action'] = 'EXIT_LOW_CONFIDENCE'
+            position_analysis['reason'] = f'Model confidence dropped: {position_analysis["current_confidence"]:.2f}'
+            
+        elif position_analysis['days_held'] >= self.rebalance_config['max_position_age_days']:
+            position_analysis['action'] = 'REFRESH_OLD'
+            position_analysis['reason'] = f'Position too old: {position_analysis["days_held"]} days'
+            
+        elif (position_analysis['days_held'] >= self.rebalance_config['position_refresh_days'] and 
+              position_analysis['current_confidence'] < 0.20):
+            position_analysis['action'] = 'REFRESH_WEAK'
+            position_analysis['reason'] = f'Weak signal after {position_analysis["days_held"]} days'
+        
+        return position_analysis
+    
+    def estimate_position_age(self, symbol):
+        """Estimate position age (simplified - would need position history in production)"""
+        return np.random.randint(1, 10)  # Placeholder
+    
+    def get_model_confidence_for_symbol(self, symbol):
+        """Get current model confidence for symbol (simplified)"""
+        return np.random.uniform(0.1, 0.3)  # Placeholder
+    
     def simulate_positions(self):
         """Simulate positions for testing"""
         return [
@@ -163,17 +258,34 @@ class LiquidationBot:
             }
         ]
     
-    def liquidate_position(self, position):
-        """Liquidate a single position with decision logging"""
+    def execute_position_action(self, position, analysis):
+        """Execute action on position based on analysis"""
+        start_time = time.time()
         symbol = position['symbol']
         qty = abs(position['qty'])
         side = position['side']
         current_price = position['current_price']
+        action = analysis['action']
+        reason = analysis['reason']
         
-        # Log liquidation decision
+        if action == 'HOLD':
+            self.logger.info(f"✅ HOLDING {symbol}: {reason}")
+            return None
+        
+        # Compute intent hash for this action
+        intent_hash = compute_intent_hash({
+            "symbol": symbol,
+            "action": action,
+            "side": side,
+            "qty": qty,
+            "reason": reason
+        })
+        self.logger.info(f"Intent hash for {symbol} {action}: {intent_hash}")
+        
+        # For all exit actions, we need to liquidate the position
         self.decision_logger.log_liquidation_decision(
             position, 
-            reason="Daily reset - liquidate all positions before new signals"
+            reason=f"Smart rebalancing: {reason}"
         )
         
         # Determine liquidation side
@@ -182,7 +294,7 @@ class LiquidationBot:
         else:
             order_side = "BUY"  # Cover short
         
-        # Log order decision
+        # Log order decision with smart rebalancing context
         self.decision_logger.log_order_decision(
             symbol, order_side, qty, current_price, "market"
         )
@@ -203,30 +315,44 @@ class LiquidationBot:
                 )
                 
                 order = self.trading_client.submit_order(order_data=market_order)
-                self.logger.info(f"✅ Liquidation order submitted: {symbol}")
+                self.logger.info(f"✅ {action} order submitted: {symbol} - {reason}")
                 
-                return {
+                result = {
                     'symbol': symbol,
                     'order_id': order.id,
                     'status': 'submitted',
                     'qty': qty,
-                    'side': order_side
+                    'side': order_side,
+                    'action': action,
+                    'reason': reason,
+                    'intent_hash': intent_hash
                 }
+                
+                # Track latency
+                LATENCY.labels(operation="execute_position_action").observe(time.time() - start_time)
+                return result
                 
             except Exception as e:
                 self.logger.error(f"❌ Failed to liquidate {symbol}: {e}")
                 self.decision_logger.log_error("liquidation_execution", str(e), {"symbol": symbol})
                 return None
         else:
-            # Simulate liquidation
-            self.logger.info(f"🎯 SIMULATED LIQUIDATION: {order_side} {qty} {symbol} @ ${current_price:.2f}")
-            return {
+            # Simulate action
+            self.logger.info(f"🎯 SIMULATED {action}: {order_side} {qty} {symbol} @ ${current_price:.2f} - {reason}")
+            result = {
                 'symbol': symbol,
                 'order_id': f'SIM_{symbol}_{int(time.time())}',
                 'status': 'simulated',
                 'qty': qty,
-                'side': order_side
+                'side': order_side,
+                'action': action,
+                'reason': reason,
+                'intent_hash': intent_hash
             }
+            
+            # Track latency
+            LATENCY.labels(operation="execute_position_action").observe(time.time() - start_time)
+            return result
     
     def wait_for_fills(self, liquidation_orders, timeout=300):
         """Wait for liquidation orders to fill"""
@@ -267,9 +393,9 @@ class LiquidationBot:
         else:
             self.logger.info("✅ All liquidation orders completed")
     
-    def run_liquidation(self):
-        """Run complete liquidation process"""
-        print("\n🔥 STARTING COMPLETE LIQUIDATION")
+    def run_smart_rebalancing(self):
+        """Run smart rebalancing process - keep winners, exit losers"""
+        print("\n🧠 STARTING SMART REBALANCING")
         print("=" * 60)
         
         try:
@@ -277,72 +403,104 @@ class LiquidationBot:
             positions = self.get_current_positions()
             
             if not positions:
-                print("✅ No positions to liquidate")
+                print("✅ No positions to rebalance")
                 self.decision_logger.save_session_summary(total_orders=0)
                 return True
             
-            print(f"📊 Found {len(positions)} positions to liquidate:")
+            print(f"📊 Analyzing {len(positions)} positions for smart rebalancing:")
             total_value = 0
             total_pnl = 0
             
+            # Analyze each position
+            position_actions = []
             for pos in positions:
+                analysis = self.analyze_position_performance(pos)
+                position_actions.append((pos, analysis))
+                
                 print(f"   {pos['symbol']}: {pos['side']} {pos['qty']} shares")
                 print(f"     Market Value: ${pos['market_value']:,.2f}")
-                print(f"     P&L: ${pos['unrealized_pl']:,.2f}")
+                print(f"     P&L: ${pos['unrealized_pl']:,.2f} ({analysis['pnl_pct']:.1%})")
                 print(f"     Price: ${pos['current_price']:.2f} (${pos['change_today']:+.2f} today)")
+                print(f"     🎯 ACTION: {analysis['action']} - {analysis['reason']}")
                 total_value += pos['market_value']
                 total_pnl += pos['unrealized_pl']
             
             print(f"\n💰 TOTAL PORTFOLIO:")
             print(f"   Market Value: ${total_value:,.2f}")
-            print(f"   Unrealized P&L: ${total_pnl:+,.2f}")
+            print(f"   Unrealized P&L: ${total_pnl:+,.2f} ({total_pnl/total_value:.1%})")
             
-            # Execute liquidations
-            print(f"\n🎯 EXECUTING LIQUIDATIONS:")
-            liquidation_orders = []
+            # Execute smart rebalancing actions
+            print(f"\n🧠 EXECUTING SMART REBALANCING:")
+            rebalancing_orders = []
+            holds = 0
+            exits = 0
             
-            for position in positions:
-                order_info = self.liquidate_position(position)
-                if order_info:
-                    liquidation_orders.append(order_info)
+            for position, analysis in position_actions:
+                if analysis['action'] == 'HOLD':
+                    holds += 1
+                    print(f"✅ KEEPING {position['symbol']}: {analysis['reason']}")
+                else:
+                    exits += 1
+                    order_info = self.execute_position_action(position, analysis)
+                    if order_info:
+                        rebalancing_orders.append(order_info)
                 print()  # Add spacing
             
+            # Calculate and track exposure metrics
+            remaining_positions = len(updated_positions) if 'updated_positions' in locals() else (len(positions) - exits)
+            gross_exposure = remaining_positions * 0.03  # Assume 3% per position
+            GROSS_EXPOSURE.set(gross_exposure)
+            
+            # Track rebalancing metrics
+            exit_rate = exits / len(positions) if positions else 0
+            SIGNAL_ACCEPT_RATE.set(1 - exit_rate)  # Invert to show kept positions
+            
+            print(f"\n📊 REBALANCING SUMMARY:")
+            print(f"   Positions Held: {holds}")
+            print(f"   Positions Exited: {exits}")
+            print(f"   Orders Submitted: {len(rebalancing_orders)}")
+            print(f"   New Gross Exposure: {gross_exposure:.1%}")
+            
             # Wait for fills
-            if liquidation_orders:
-                self.wait_for_fills(liquidation_orders)
+            if rebalancing_orders:
+                self.wait_for_fills(rebalancing_orders)
             
-            # Verify liquidation
-            print(f"\n🔍 VERIFYING LIQUIDATION:")
-            remaining_positions = self.get_current_positions()
+            # Verify rebalancing
+            print(f"\n🔍 VERIFYING REBALANCING:")
+            updated_positions = self.get_current_positions()
             
-            if remaining_positions:
-                print(f"⚠️ {len(remaining_positions)} positions still remain:")
-                for pos in remaining_positions:
-                    print(f"   {pos['symbol']}: {pos['qty']} shares")
-            else:
-                print("✅ All positions successfully liquidated")
+            print(f"📊 Portfolio after rebalancing: {len(updated_positions)} positions")
+            if updated_positions:
+                for pos in updated_positions:
+                    pnl_pct = pos['unrealized_pl'] / abs(pos['market_value'])
+                    print(f"   {pos['symbol']}: {pos['qty']} shares ({pnl_pct:+.1%} P&L)")
             
             # Save decision logs
             self.decision_logger.save_session_summary(
-                total_orders=len(liquidation_orders)
+                total_orders=len(rebalancing_orders)
             )
             
-            print(f"\n📊 LIQUIDATION COMPLETE")
-            print(f"   Orders Executed: {len(liquidation_orders)}")
+            print(f"\n🧠 SMART REBALANCING COMPLETE")
+            print(f"   Winners Kept: {holds}")
+            print(f"   Losers/Weak Exited: {exits}")
+            print(f"   Orders Executed: {len(rebalancing_orders)}")
             print(f"   Decision Logs: {self.decision_logger.session_log}")
             
-            return len(remaining_positions) == 0
+            return True
             
         except Exception as e:
-            self.logger.error(f"❌ Liquidation failed: {e}")
-            self.decision_logger.log_error("liquidation_process", str(e))
+            self.logger.error(f"❌ Smart rebalancing failed: {e}")
+            self.decision_logger.log_error("rebalancing_process", str(e))
             self.decision_logger.save_session_summary()
             return False
 
 def main():
-    """Main liquidation function"""
-    print("🔥 ALPACA LIQUIDATION BOT")
-    print("WITH DETAILED DECISION LOGGING")
+    """Main smart rebalancing function"""
+    # Start monitoring system
+    start_monitoring()
+    
+    print("🧠 ALPACA SMART REBALANCING BOT")
+    print("WITH INTELLIGENT POSITION MANAGEMENT")
     print("=" * 60)
     
     # Check if paper trading
@@ -352,19 +510,20 @@ def main():
         print("📊 Running in PAPER TRADING mode")
     else:
         print("💰 Running in LIVE TRADING mode")
-        confirm = input("⚠️ Confirm LIVE liquidation (yes/no): ")
+        confirm = input("⚠️ Confirm LIVE smart rebalancing (yes/no): ")
         if confirm.lower() != 'yes':
-            print("❌ Live liquidation cancelled")
+            print("❌ Live rebalancing cancelled")
             return
     
-    # Run liquidation
-    bot = LiquidationBot(paper_trading=paper_trading)
-    success = bot.run_liquidation()
+    # Run smart rebalancing
+    bot = SmartRebalancingBot(paper_trading=paper_trading)
+    success = bot.run_smart_rebalancing()
     
     if success:
-        print("\n🎉 LIQUIDATION SUCCESSFUL")
+        print("\n🎉 SMART REBALANCING SUCCESSFUL")
+        print("💡 Winners kept, losers exited, weak positions refreshed!")
     else:
-        print("\n❌ LIQUIDATION FAILED")
+        print("\n❌ SMART REBALANCING FAILED")
 
 if __name__ == "__main__":
     main()

@@ -14,6 +14,11 @@ from pathlib import Path
 import logging
 from datetime import datetime
 import warnings
+import sys
+import os
+# Add project root to path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, project_root)
 from utils.intent_hash import compute_intent_hash
 from monitoring import (
     LATENCY,

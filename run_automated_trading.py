@@ -158,17 +158,17 @@ class AutomatedTradingSystem:
         print("=" * 50)
         
         try:
-            # Step 1: Liquidate all positions
-            print("🔥 Step 1: Liquidating all positions...")
-            liquidation_result = subprocess.run([
+            # Step 1: Smart rebalancing (keep winners, exit losers)
+            print("🧠 Step 1: Smart rebalancing positions...")
+            rebalancing_result = subprocess.run([
                 sys.executable, "PRODUCTION/bots/liquidation_bot.py"
             ], capture_output=True, text=True, timeout=600)
             
-            if liquidation_result.returncode != 0:
-                print(f"❌ Liquidation failed: {liquidation_result.stderr}")
+            if rebalancing_result.returncode != 0:
+                print(f"❌ Smart rebalancing failed: {rebalancing_result.stderr}")
                 return False
             
-            print("✅ Liquidation completed")
+            print("✅ Smart rebalancing completed")
             
             # Step 2: Wait a moment for orders to settle
             print("⏳ Waiting 30 seconds for orders to settle...")

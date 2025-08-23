@@ -1,0 +1,76 @@
+{
+  "session_id": "20250823_081421",
+  "start_time": "2025-08-23T08:14:21.430857",
+  "decisions": [],
+  "liquidations": [
+    {
+      "timestamp": "2025-08-23T08:14:21.548413",
+      "action": "LIQUIDATE",
+      "symbol": "AAPL",
+      "current_qty": 50,
+      "current_side": "long",
+      "market_value": 8500.0,
+      "unrealized_pl": 250.0,
+      "reason": "Smart rebalancing: Model confidence dropped: 0.13",
+      "decision_context": {
+        "strategy": "Daily portfolio reset",
+        "rule": "Liquidate all positions before new signals",
+        "confidence": 1.0
+      }
+    },
+    {
+      "timestamp": "2025-08-23T08:14:21.548501",
+      "action": "LIQUIDATE",
+      "symbol": "TSLA",
+      "current_qty": 30,
+      "current_side": "long",
+      "market_value": 7200.0,
+      "unrealized_pl": 450.0,
+      "reason": "Smart rebalancing: Profitable position +6.2%, trailing stop active",
+      "decision_context": {
+        "strategy": "Daily portfolio reset",
+        "rule": "Liquidate all positions before new signals",
+        "confidence": 1.0
+      }
+    }
+  ],
+  "orders": [
+    {
+      "timestamp": "2025-08-23T08:14:21.548426",
+      "symbol": "AAPL",
+      "side": "SELL",
+      "quantity": 50,
+      "price": 170.0,
+      "order_type": "market",
+      "estimated_value": 8500.0,
+      "decision_context": {
+        "execution_strategy": "Market order for immediate fill",
+        "timing": "During trading hours",
+        "liquidity_check": "Assumed sufficient for large-cap stocks"
+      }
+    },
+    {
+      "timestamp": "2025-08-23T08:14:21.548507",
+      "symbol": "TSLA",
+      "side": "SELL",
+      "quantity": 30,
+      "price": 240.0,
+      "order_type": "market",
+      "estimated_value": 7200.0,
+      "decision_context": {
+        "execution_strategy": "Market order for immediate fill",
+        "timing": "During trading hours",
+        "liquidity_check": "Assumed sufficient for large-cap stocks"
+      }
+    }
+  ],
+  "errors": [],
+  "end_time": "2025-08-23T08:14:21.548557",
+  "total_orders_executed": 2,
+  "summary": {
+    "liquidations_count": 2,
+    "orders_count": 2,
+    "errors_count": 0,
+    "decisions_count": 0
+  }
+}

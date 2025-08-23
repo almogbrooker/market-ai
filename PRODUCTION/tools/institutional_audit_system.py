@@ -17,7 +17,7 @@ warnings.filterwarnings('ignore')
 class InstitutionalAuditor:
     """Complete institutional-grade audit system"""
     
-    def __init__(self, models_root="PRODUCTION/models/best_institutional_model", data_path=None):
+    def __init__(self, models_root="PRODUCTION/models", data_path=None):
         self.models_root = Path(models_root)
         self.data_path = data_path
         self.audit_results = {}
