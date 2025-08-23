@@ -1,0 +1,14 @@
+artifact_uri: file:///home/almog/market-ai/mlruns/0/99cff8be4d6a45a192fc02158e31d051/artifacts
+end_time: 1755927740895
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 99cff8be4d6a45a192fc02158e31d051
+run_name: clumsy-worm-625
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1755927740889
+status: 3
+tags: []
+user_id: almog

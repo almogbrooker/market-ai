@@ -1,0 +1,14 @@
+artifact_uri: file:///home/almog/market-ai/mlruns/0/b61a99deb3c0444c997d90641d2a403d/artifacts
+end_time: 1755927706322
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: b61a99deb3c0444c997d90641d2a403d
+run_name: fearless-quail-633
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1755927706316
+status: 3
+tags: []
+user_id: almog

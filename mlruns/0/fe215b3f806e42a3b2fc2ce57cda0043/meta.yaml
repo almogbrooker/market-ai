@@ -1,0 +1,14 @@
+artifact_uri: file:///home/almog/market-ai/mlruns/0/fe215b3f806e42a3b2fc2ce57cda0043/artifacts
+end_time: 1755927730185
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: fe215b3f806e42a3b2fc2ce57cda0043
+run_name: thoughtful-pug-757
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1755927730179
+status: 3
+tags: []
+user_id: almog

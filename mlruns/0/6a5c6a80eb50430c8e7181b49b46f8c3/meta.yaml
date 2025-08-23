@@ -1,0 +1,14 @@
+artifact_uri: file:///home/almog/market-ai/mlruns/0/6a5c6a80eb50430c8e7181b49b46f8c3/artifacts
+end_time: 1755927722048
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 6a5c6a80eb50430c8e7181b49b46f8c3
+run_name: gentle-shrew-424
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1755927722042
+status: 3
+tags: []
+user_id: almog
