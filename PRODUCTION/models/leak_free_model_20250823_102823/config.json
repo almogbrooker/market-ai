@@ -1,8 +1,0 @@
-{
-  "model_type": "ridge_regression",
-  "alpha": 0.1,
-  "feature_count": 90,
-  "training_date": "20250823_102823",
-  "leak_free": true,
-  "temporal_cv": true
-}

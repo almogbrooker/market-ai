@@ -1,0 +1,43 @@
+{
+  "system": {
+    "name": "Institutional AI Trading System",
+    "version": "1.0.0",
+    "environment": "production"
+  },
+  "models": {
+    "primary": "src/models/production_model",
+    "backup": "PRODUCTION/models/conservative_ensemble_20250824_092609"
+  },
+  "risk_management": {
+    "max_position_size": 0.03,
+    "baseline_gross_exposure": 0.33,
+    "max_gross_exposure": 0.6,
+    "daily_loss_limit": 0.02,
+    "stop_loss": 0.08,
+    "take_profit": 0.25
+  },
+  "monitoring": {
+    "drift_threshold_warning": 0.1,
+    "drift_threshold_critical": 0.25,
+    "ic_degradation_threshold": 0.005,
+    "monitoring_frequency": "daily"
+  },
+  "data": {
+    "primary_dataset": "src/data/train_data.csv",
+    "features_count": 46,
+    "target_variable": "Return_1D",
+    "test_dataset": "src/data/test_data.csv"
+  },
+  "deployment_timestamp": "20250824_094327",
+  "current_performance": {
+    "ic": 0.067,
+    "gated_ic": 0.096539,
+    "direction_accuracy": 0.5420386904761905,
+    "model_type": "rank_transformed_ensemble",
+    "rank_transforms_applied": [
+      "Yield_Spread",
+      "Treasury_10Y"
+    ],
+    "overfitting_controlled": true
+  }
+}

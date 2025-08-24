@@ -1,0 +1,22 @@
+{
+  "monitoring_mode": "n_aware",
+  "target_accept_rate": 0.18,
+  "universe_thresholds": {
+    "hard_floor": 20,
+    "small_universe": 100
+  },
+  "minimum_counts": {
+    "ic_validation": 10,
+    "skew_validation": 5,
+    "slippage_validation": 10
+  },
+  "binomial_confidence": 0.95,
+  "deny_list": [
+    "Yield_Spread",
+    "Treasury_10Y"
+  ],
+  "required_ranked": [
+    "Yield_Spread_rank",
+    "Treasury_10Y_rank"
+  ]
+}
