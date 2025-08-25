@@ -1,0 +1,42 @@
+{
+  "model_info": {
+    "model_type": "ridge",
+    "training_date": "2025-08-25T09:06:05.151944",
+    "model_name": "institutional_model_20250825_090605",
+    "institutional_approved": true
+  },
+  "performance": {
+    "validation_ic": 0.07125120021120356,
+    "validation_mse": 0.0004972142964647997,
+    "ic_quality": "GOOD",
+    "assessment_message": "IC within institutional range (0.0713)"
+  },
+  "features": {
+    "count": 13,
+    "names": [
+      "return_5d_lag1_t1",
+      "return_20d_lag1_t1",
+      "vol_20d_lag1_t1",
+      "Volume_Ratio_t1",
+      "Volume_ZScore_t1",
+      "RSI_14_t1",
+      "MACD_Signal_t1",
+      "VIX_t1",
+      "VIX_Spike_t1",
+      "Treasury_10Y_t1",
+      "ml_pos_t1",
+      "ml_neg_t1",
+      "alpha_1d_t1"
+    ]
+  },
+  "institutional_standards": {
+    "min_ic_threshold": 0.005,
+    "max_ic_threshold": 0.08,
+    "meets_standards": true
+  },
+  "deployment_ready": true,
+  "model_params": {
+    "best_alpha": 10.0,
+    "cv_score": 0.053005214265871195
+  }
+}

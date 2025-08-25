@@ -1,0 +1,217 @@
+{
+  "timestamp": "2025-08-25T09:43:44.852345",
+  "validation_results": {
+    "section_0": {
+      "versions_frozen": {
+        "python_version": "3.12.3",
+        "model_hash": "ae25504a4025ba1182b1bcdb3e12b485586ed68800d8e71b1ff7c6f48b46882f",
+        "scaler_hash": "af449312071c4cbaf4873284b204396d96311579fda2c898eca9474c4d85110e",
+        "status": "PASS"
+      },
+      "deterministic_ops": {
+        "seed_reproducible": true,
+        "status": "PASS"
+      },
+      "feature_manifest": {
+        "status": "FAIL",
+        "error": "'list' object has no attribute 'get'"
+      }
+    },
+    "section_1": {
+      "no_future_data": {
+        "latest_date": "2022-12-29",
+        "today": "2025-08-25",
+        "future_dated_rows": 0,
+        "status": "PASS"
+      },
+      "universe_stability": {
+        "early_count": 15,
+        "late_count": 14,
+        "stability_ratio": 0.9333333333333333,
+        "status": "PASS"
+      },
+      "corporate_actions": {
+        "large_overnight_moves": 1,
+        "potential_splits": 1,
+        "status": "PASS"
+      },
+      "calendar_consistency": {
+        "missing_business_days": 22,
+        "extra_dates": 0,
+        "status": "WARN"
+      }
+    },
+    "section_4": {
+      "placebo_test": {
+        "placebo_ic": -0.025114759840168015,
+        "threshold": 0.002,
+        "status": "FAIL"
+      },
+      "forward_shift_test": {
+        "shift_ics": [
+          -0.012681131178319571,
+          -0.030005226556205578,
+          -0.016174741400185596
+        ],
+        "decay_monotonic": false,
+        "status": "WARN"
+      },
+      "same_bar_trading": {
+        "same_day_features": [],
+        "status": "PASS"
+      }
+    },
+    "section_6": {
+      "drift_detection": {
+        "psi_results": {
+          "feature_psi": {
+            "return_5d_lag1_t1": 0.005948623187911523,
+            "return_20d_lag1_t1": 0.013357225261325816,
+            "vol_20d_lag1_t1": 0.019785635482936256,
+            "Volume_Ratio_t1": 0.0032242474693772857,
+            "Volume_ZScore_t1": 0.009446239685950738,
+            "RSI_14_t1": 0.00874972033224836,
+            "MACD_Signal_t1": 0.4719076249207214,
+            "VIX_t1": 0.002579201060383271,
+            "VIX_Spike_t1": 0.0024720060815440065,
+            "Treasury_10Y_t1": 0.0034262923905622267
+          },
+          "global_psi": 0.05408968158729609
+        },
+        "ks_results": {
+          "return_5d_lag1_t1": {
+            "ks_statistic": 0.02361576052395669,
+            "p_value": 0.23075263734161372,
+            "significant": "False"
+          },
+          "return_20d_lag1_t1": {
+            "ks_statistic": 0.03687734291840859,
+            "p_value": 0.010539868600024834,
+            "significant": "True"
+          },
+          "vol_20d_lag1_t1": {
+            "ks_statistic": 0.0343576611182245,
+            "p_value": 0.021028905174804092,
+            "significant": "True"
+          },
+          "Volume_Ratio_t1": {
+            "ks_statistic": 0.02190854754913808,
+            "p_value": 0.31061475886188905,
+            "significant": "False"
+          },
+          "Volume_ZScore_t1": {
+            "ks_statistic": 0.03742361678896551,
+            "p_value": 0.009015928278578647,
+            "significant": "True"
+          }
+        },
+        "mmd_results": {
+          "return_5d_lag1_t1": {
+            "mmd_statistic": 0.018236742328395842,
+            "significant": "False"
+          },
+          "return_20d_lag1_t1": {
+            "mmd_statistic": 0.042647368982924615,
+            "significant": "False"
+          },
+          "vol_20d_lag1_t1": {
+            "mmd_statistic": 0.028004123036619092,
+            "significant": "False"
+          }
+        },
+        "global_psi": 0.05408968158729609,
+        "max_feature_psi": 0.4719076249207214,
+        "status": "FAIL"
+      }
+    },
+    "section_18": {
+      "monitoring_system": {
+        "config": {
+          "live_metrics": [
+            "psi_global",
+            "psi_topN",
+            "gate_accept",
+            "ic_online_60d",
+            "turnover",
+            "broker_errors",
+            "latency",
+            "slippage",
+            "VaR",
+            "beta",
+            "sector_tilts"
+          ],
+          "alert_thresholds": {
+            "psi_global": {
+              "critical": 0.25,
+              "warning": 0.2
+            },
+            "psi_feature_max": {
+              "critical": 0.1,
+              "warning": 0.08
+            },
+            "coverage_deviation": {
+              "critical": 0.05,
+              "warning": 0.03
+            },
+            "online_ic_3day": {
+              "critical": -0.01,
+              "warning": -0.005
+            },
+            "median_slippage": {
+              "critical": 15,
+              "warning": 12
+            },
+            "system_latency": {
+              "critical": 250,
+              "warning": 100
+            }
+          },
+          "auto_demote_triggers": [
+            "PSI \u2265 0.25 for 2 days",
+            "Coverage out-of-band for 2 days",
+            "Online IC \u2264 0 for 3 days",
+            "Broker error spikes",
+            "System latency > 250ms consistently"
+          ]
+        },
+        "sign_flip_guard": {
+          "config": {
+            "window_days": 60,
+            "threshold_ic": -0.01,
+            "consecutive_days": 3,
+            "p_value_threshold": 0.05,
+            "response_actions": [
+              "Switch to paper trading",
+              "Alert risk management",
+              "Optional signal inversion (human approval required)"
+            ]
+          },
+          "implementation": {
+            "rolling_ic_calculation": true,
+            "statistical_significance": true,
+            "automated_response": true,
+            "human_override": true,
+            "implemented": true
+          },
+          "implemented": true
+        },
+        "tests": {
+          "metrics_collection": true,
+          "alert_system": true,
+          "auto_demotion": true,
+          "sign_flip_guard": true,
+          "incident_playbooks": true,
+          "paging_system": false
+        },
+        "status": "PASS"
+      }
+    }
+  },
+  "summary": {
+    "sections_passed": 2,
+    "total_sections": 5,
+    "pass_rate": 0.4,
+    "overall_pass": false,
+    "final_status": "\ud83d\udd34 EXPANDED VALIDATION FAILED"
+  }
+}

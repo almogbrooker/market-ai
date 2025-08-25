@@ -1,0 +1,48 @@
+{
+  "live_metrics": [
+    "psi_global",
+    "psi_topN",
+    "gate_accept",
+    "ic_online_60d",
+    "turnover",
+    "broker_errors",
+    "latency",
+    "slippage",
+    "VaR",
+    "beta",
+    "sector_tilts"
+  ],
+  "alert_thresholds": {
+    "psi_global": {
+      "critical": 0.25,
+      "warning": 0.2
+    },
+    "psi_feature_max": {
+      "critical": 0.1,
+      "warning": 0.08
+    },
+    "coverage_deviation": {
+      "critical": 0.05,
+      "warning": 0.03
+    },
+    "online_ic_3day": {
+      "critical": -0.01,
+      "warning": -0.005
+    },
+    "median_slippage": {
+      "critical": 15,
+      "warning": 12
+    },
+    "system_latency": {
+      "critical": 250,
+      "warning": 100
+    }
+  },
+  "auto_demote_triggers": [
+    "PSI \u2265 0.25 for 2 days",
+    "Coverage out-of-band for 2 days",
+    "Online IC \u2264 0 for 3 days",
+    "Broker error spikes",
+    "System latency > 250ms consistently"
+  ]
+}

@@ -1,0 +1,15 @@
+[
+  "return_5d_lag1_t1",
+  "return_20d_lag1_t1",
+  "vol_20d_lag1_t1",
+  "Volume_Ratio_t1",
+  "Volume_ZScore_t1",
+  "RSI_14_t1",
+  "MACD_Signal_t1",
+  "VIX_t1",
+  "VIX_Spike_t1",
+  "Treasury_10Y_t1",
+  "ml_pos_t1",
+  "ml_neg_t1",
+  "alpha_1d_t1"
+]
