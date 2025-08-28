@@ -27,8 +27,16 @@ except ImportError:
     tradeapi = None
     APIError = Exception
 
-from live_data_fetcher import LiveDataFetcher
+try:
+    from enhanced_data_fetcher import EnhancedDataFetcher
+    DATA_FETCHER_CLASS = EnhancedDataFetcher
+    print("🔄 Using Enhanced Data Fetcher (S&P 500)")
+except ImportError:
+    from live_data_fetcher import LiveDataFetcher
+    DATA_FETCHER_CLASS = LiveDataFetcher
+    print("🔄 Using Basic Data Fetcher (Legacy)")
 from feature_engineering import UnifiedFeatureEngine, ProductionEnsemble
+from market_regime_detector import MarketRegimeDetector
 
 class LiveTradingBot:
     """Production trading bot with comprehensive risk controls"""
@@ -72,9 +80,11 @@ class LiveTradingBot:
         self.emergency_override = False
         
         # Components
-        self.data_fetcher = LiveDataFetcher()
+        self.data_fetcher = DATA_FETCHER_CLASS()
         self.feature_engine = UnifiedFeatureEngine()
+        self.regime_detector = MarketRegimeDetector()
         self.current_positions = {}
+        self.current_regime = None
         
         # Alpaca-specific settings
         self.alpaca_account_info = None
@@ -590,6 +600,131 @@ class LiveTradingBot:
             self.logger.warning(f"Failed to load current positions: {e}")
             return {}
     
+    def analyze_market_regime(self) -> Dict:
+        """Analyze current market regime and adjust strategy accordingly"""
+        try:
+            # Get comprehensive market regime analysis
+            regime = self.regime_detector.get_market_regime()
+            
+            if 'error' in regime:
+                print(f"⚠️ Market regime analysis failed: {regime['error']}")
+                # Return default neutral regime
+                return {
+                    'overall_regime': {
+                        'consensus_regime': 'SIDEWAYS',
+                        'trading_environment': 'NEUTRAL',
+                        'recommended_exposure': 0.30,
+                        'fear_level': 'MEDIUM'
+                    },
+                    'regime_adjustment': {
+                        'exposure_multiplier': 1.0,
+                        'turnover_adjustment': 1.0,
+                        'risk_adjustment': 1.0
+                    }
+                }
+            
+            overall = regime.get('overall_regime', {})
+            consensus_regime = overall.get('consensus_regime', 'SIDEWAYS')
+            trading_env = overall.get('trading_environment', 'NEUTRAL')
+            recommended_exposure = overall.get('recommended_exposure', 0.30)
+            fear_level = overall.get('fear_level', 'MEDIUM')
+            
+            # Calculate regime adjustments
+            regime_adjustments = self._calculate_regime_adjustments(regime)
+            
+            # Log regime analysis
+            self.decision_logger.info("🌍 MARKET REGIME ANALYSIS")
+            self.decision_logger.info(f"   📊 Consensus: {consensus_regime}")
+            self.decision_logger.info(f"   🏛️ Environment: {trading_env}")
+            self.decision_logger.info(f"   😰 Fear Level: {fear_level}")
+            self.decision_logger.info(f"   🎯 Recommended Exposure: {recommended_exposure:.1%}")
+            self.decision_logger.info(f"   ⚙️ Exposure Multiplier: {regime_adjustments['exposure_multiplier']:.2f}")
+            
+            # Print to console
+            print(f"🌍 Market Regime: {consensus_regime} ({trading_env})")
+            print(f"   📊 Fear Level: {fear_level}")
+            print(f"   🎯 Exposure Adjustment: {regime_adjustments['exposure_multiplier']:.2f}x")
+            
+            # Store complete analysis
+            regime['regime_adjustment'] = regime_adjustments
+            return regime
+            
+        except Exception as e:
+            print(f"❌ Market regime analysis error: {e}")
+            # Return safe default
+            return {
+                'overall_regime': {
+                    'consensus_regime': 'SIDEWAYS',
+                    'trading_environment': 'NEUTRAL', 
+                    'recommended_exposure': 0.30,
+                    'fear_level': 'MEDIUM'
+                },
+                'regime_adjustment': {
+                    'exposure_multiplier': 1.0,
+                    'turnover_adjustment': 1.0,
+                    'risk_adjustment': 1.0
+                }
+            }
+    
+    def _calculate_regime_adjustments(self, regime: Dict) -> Dict:
+        """Calculate trading adjustments based on market regime"""
+        overall = regime.get('overall_regime', {})
+        consensus_regime = overall.get('consensus_regime', 'SIDEWAYS')
+        trading_env = overall.get('trading_environment', 'NEUTRAL')
+        fear_level = overall.get('fear_level', 'MEDIUM')
+        vol_regime = regime.get('volatility_regime', {}).get('vol_regime', 'NORMAL_VOL')
+        
+        # Base multipliers
+        exposure_multiplier = 1.0
+        turnover_adjustment = 1.0
+        risk_adjustment = 1.0
+        
+        # Adjust based on trend regime
+        if consensus_regime == 'BULL':
+            exposure_multiplier = 1.2  # Increase exposure in bull markets
+            turnover_adjustment = 1.1   # Slightly higher turnover for momentum
+        elif consensus_regime == 'BEAR':
+            exposure_multiplier = 0.7   # Reduce exposure in bear markets
+            turnover_adjustment = 0.9   # Lower turnover in bear markets
+            risk_adjustment = 0.8       # Tighter risk controls
+        
+        # Adjust based on volatility regime
+        if vol_regime == 'HIGH_VOL':
+            exposure_multiplier *= 0.8  # Reduce in high vol
+            risk_adjustment *= 0.7      # Tighter controls
+            turnover_adjustment *= 0.8  # Lower turnover in chaos
+        elif vol_regime == 'LOW_VOL':
+            exposure_multiplier *= 1.1  # Increase in low vol
+            turnover_adjustment *= 1.1  # Can afford higher turnover
+        
+        # Adjust based on fear level
+        if fear_level == 'HIGH':
+            exposure_multiplier *= 0.6  # Dramatic reduction in crisis
+            risk_adjustment *= 0.5      # Much tighter controls
+            turnover_adjustment *= 0.7  # Lower turnover in panic
+        elif fear_level == 'LOW':
+            exposure_multiplier *= 1.2  # Increase when complacent
+            turnover_adjustment *= 1.2  # Higher turnover when calm
+        
+        # Adjust based on trading environment
+        if trading_env == 'CRISIS':
+            exposure_multiplier *= 0.5  # Emergency reduction
+            risk_adjustment *= 0.3      # Emergency controls
+        elif trading_env == 'GOLDILOCKS':
+            exposure_multiplier *= 1.3  # Perfect conditions
+            turnover_adjustment *= 1.2  # Active trading
+        
+        # Apply bounds (never go below 30% or above 200% of base exposure)
+        exposure_multiplier = max(0.3, min(2.0, exposure_multiplier))
+        turnover_adjustment = max(0.5, min(2.0, turnover_adjustment))
+        risk_adjustment = max(0.3, min(1.5, risk_adjustment))
+        
+        return {
+            'exposure_multiplier': exposure_multiplier,
+            'turnover_adjustment': turnover_adjustment,
+            'risk_adjustment': risk_adjustment
+        }
+
     def calculate_target_portfolio(self, market_data: pd.DataFrame) -> Optional[pd.DataFrame]:
         """Calculate target portfolio with risk controls"""
         print(f"\\n💼 Calculating target portfolio...")
@@ -643,8 +778,15 @@ class LiveTradingBot:
             # Risk-based portfolio construction
             portfolio_df = portfolio_df.sort_values('prediction', ascending=False)
             
+            # Apply regime adjustments to exposure limits
+            regime_adjusted_gross_exposure = self.max_gross_exposure
+            if self.current_regime and 'regime_adjustment' in self.current_regime:
+                exposure_multiplier = self.current_regime['regime_adjustment']['exposure_multiplier']
+                regime_adjusted_gross_exposure = self.max_gross_exposure * exposure_multiplier
+                print(f"   🌍 Regime-adjusted exposure: {self.max_gross_exposure:.1%} → {regime_adjusted_gross_exposure:.1%}")
+            
             # Calculate positions based on predictions and risk constraints
-            n_positions = min(len(portfolio_df), int(self.max_gross_exposure / self.max_position_size))
+            n_positions = min(len(portfolio_df), int(regime_adjusted_gross_exposure / self.max_position_size))
             n_long = n_positions // 2
             n_short = n_positions // 2
             
@@ -899,8 +1041,16 @@ class LiveTradingBot:
         print(f"   📦 Net inventory: {inventory_metrics['net_exposure']:.2%}")
         print(f"   📊 Gross inventory: {inventory_metrics['gross_exposure']:.2%}")
         
-        # Apply turnover control with inventory consideration
-        effective_turnover_limit = self.initial_turnover_limit if self.initial_build_mode else self.max_daily_turnover
+        # Apply turnover control with inventory consideration and regime adjustments
+        base_turnover_limit = self.initial_turnover_limit if self.initial_build_mode else self.max_daily_turnover
+        effective_turnover_limit = base_turnover_limit
+        
+        # Apply regime-based turnover adjustment
+        if self.current_regime and 'regime_adjustment' in self.current_regime:
+            turnover_adjustment = self.current_regime['regime_adjustment']['turnover_adjustment']
+            effective_turnover_limit = base_turnover_limit * turnover_adjustment
+            if turnover_adjustment != 1.0:
+                print(f"   🌍 Regime-adjusted turnover: {base_turnover_limit:.2%} → {effective_turnover_limit:.2%}")
         
         if trade_df['desired_turnover'].iloc[0] > effective_turnover_limit:
             # Scale down based on inventory urgency
@@ -1516,6 +1666,10 @@ class LiveTradingBot:
             if not quality['valid']:
                 self.logger.error(f"Data quality issues: {quality['issues']}")
                 return False
+            
+            # 3.5. Analyze market regime
+            regime_analysis = self.analyze_market_regime()
+            self.current_regime = regime_analysis
             
             # 4. Calculate target portfolio (optimized for speed)
             start_portfolio_time = datetime.now()
