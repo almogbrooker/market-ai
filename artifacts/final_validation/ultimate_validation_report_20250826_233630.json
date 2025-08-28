@@ -1,0 +1,53 @@
+{
+  "timestamp": "2025-08-26T23:36:30.033675",
+  "total_checks": 40,
+  "checks_passed": [
+    "Data Completeness",
+    "Date Consistency",
+    "Price Data Sanity",
+    "Volume Data",
+    "Data Coverage",
+    "Feature Completeness",
+    "No Lookahead Bias",
+    "Feature Value Ranges",
+    "Feature Correlations",
+    "Sufficient Clean Samples",
+    "Target Creation",
+    "Target Stats (1d_forward)",
+    "Target Stats (2d_forward)",
+    "Target Stats (5d_forward)",
+    "Best Target (5d)",
+    "Minimum Feature Lag",
+    "Feature-Target Correlations",
+    "Sign-Flip Diagnostic",
+    "Model Type",
+    "Test IC Performance",
+    "Test ICIR Performance",
+    "Validation Degradation",
+    "Model Feature Count",
+    "Sufficient Training Data",
+    "Sufficient Test Data",
+    "Feature Alignment",
+    "Prediction Generation",
+    "Prediction Statistics",
+    "Stock Coverage",
+    "Prediction Validity",
+    "Gross Exposure",
+    "Net Exposure",
+    "Position Count",
+    "Prediction Spread",
+    "No Duplicate Positions",
+    "Required Files",
+    "Model Status",
+    "Feature Engine",
+    "Trading Bot"
+  ],
+  "checks_failed": [
+    "Future Price Information: Future contamination detected: True"
+  ],
+  "warnings": [
+    "CV Degradation: CV-Test IC gap: 0.0739 (threshold: \u22640.05)"
+  ],
+  "passed_percentage": 97.5,
+  "ready_for_production": false
+}

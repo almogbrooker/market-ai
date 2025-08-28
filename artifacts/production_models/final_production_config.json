@@ -1,0 +1,24 @@
+{
+  "model_strategy": "single_best",
+  "primary_model": "final_production_model.pkl",
+  "model_file": "final_production_model.pkl",
+  "model_type": "RandomForest",
+  "performance_metrics": {
+    "test_ic": 0.05865128277794002,
+    "recent_ic": 0.07001430685126796,
+    "top_bottom_spread": 0.010620058976993047
+  },
+  "validation_results": {
+    "models_tested": 16,
+    "models_passing_qa": 9,
+    "qa_pass_rate": 0.5625
+  },
+  "ensemble_analysis": {
+    "ensemble_attempted": true,
+    "ensemble_successful": false,
+    "reason": "Ensemble methods did not improve upon best single model"
+  },
+  "deployment_timestamp": "2025-08-27T09:05:38.119712",
+  "production_ready": true,
+  "deployment_version": "final_v1.0"
+}

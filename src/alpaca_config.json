@@ -1,0 +1,29 @@
+{
+  "broker": "alpaca",
+  "alpaca_paper_trading": true,
+  "portfolio_value": 100000,
+  "min_order_value": 10,
+  "max_order_value": 10000,
+  "rebalance_time": "15:45",
+  "order_type": "market",
+  "time_in_force": "day",
+  "risk_checks": true,
+  "pre_trade_validation": true,
+  "professional_settings": {
+    "max_position_size": 0.015,
+    "max_gross_exposure": 0.30,
+    "max_net_exposure": 0.03,
+    "max_sector_exposure": 0.15,
+    "monthly_turnover_target": 0.20,
+    "min_ic_threshold": 0.005,
+    "max_drawdown": 0.025,
+    "lookback_days": 20
+  },
+  "alpaca_specific": {
+    "fractional_shares": true,
+    "extended_hours": false,
+    "order_class": "simple",
+    "stop_loss_enabled": false,
+    "take_profit_enabled": false
+  }
+}

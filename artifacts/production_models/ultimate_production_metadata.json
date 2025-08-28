@@ -1,0 +1,61 @@
+{
+  "model_type": "RandomForest",
+  "model_params": {
+    "bootstrap": true,
+    "ccp_alpha": 0.0,
+    "criterion": "squared_error",
+    "max_depth": 6,
+    "max_features": 1.0,
+    "max_leaf_nodes": null,
+    "max_samples": null,
+    "min_impurity_decrease": 0.0,
+    "min_samples_leaf": 30,
+    "min_samples_split": 2,
+    "min_weight_fraction_leaf": 0.0,
+    "monotonic_cst": null,
+    "n_estimators": 150,
+    "n_jobs": null,
+    "oob_score": false,
+    "random_state": 43,
+    "verbose": 0,
+    "warm_start": false
+  },
+  "performance": {
+    "train_ic": 0.1945232942354733,
+    "final_ic": 0.05865128277794002,
+    "cv_ic_mean": 0.05865128277794002,
+    "cv_ic_std": 0.017595384833382004
+  },
+  "features": [
+    "momentum_5d_lag3_rank",
+    "momentum_10d_lag3_rank",
+    "momentum_20d_lag3_rank",
+    "momentum_60d_lag3_rank",
+    "volatility_10d_lag3_rank",
+    "volatility_20d_lag3_rank",
+    "volatility_60d_lag3_rank",
+    "mean_rev_10d_lag3_rank",
+    "mean_rev_20d_lag3_rank",
+    "mean_rev_40d_lag3_rank",
+    "rsi_14d_lag3_rank",
+    "rsi_30d_lag3_rank",
+    "vol_ratio_10d_lag3_rank",
+    "vol_ratio_20d_lag3_rank",
+    "price_pos_60d_lag3_rank",
+    "price_pos_252d_lag3_rank"
+  ],
+  "status": "HARDENED_PRODUCTION_READY",
+  "created": "2025-08-27T08:32:02.689860",
+  "version": "hardened_rf_balanced",
+  "production_deployment": "2025-08-27T09:01:41.774420",
+  "validation_results": {
+    "test_ic": 0.05865128277794002,
+    "recent_ic": 0.07001430685126796,
+    "spread": 0.010620058976993047,
+    "test_pvalue": 1.3476694994313142e-49,
+    "recent_pvalue": 2.012285381084892e-33,
+    "validation_passed": true
+  },
+  "deployment_status": "ULTIMATE_PRODUCTION_READY",
+  "original_file": "hardened_model_20250827_083202_1.pkl"
+}

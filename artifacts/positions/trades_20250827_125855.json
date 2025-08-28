@@ -1,0 +1,188 @@
+{
+  "timestamp": "2025-08-27T12:58:55.920690",
+  "mode": "PAPER",
+  "trades_executed": 20,
+  "total_turnover": 0.06,
+  "trades": [
+    {
+      "Ticker": "BKNG",
+      "target_weight": -0.015,
+      "current_weight": -0.012,
+      "desired_change": -0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": -0.002999999999999999,
+      "final_weight": -0.015
+    },
+    {
+      "Ticker": "COST",
+      "target_weight": 0.015,
+      "current_weight": 0.012,
+      "desired_change": 0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": 0.002999999999999999,
+      "final_weight": 0.015
+    },
+    {
+      "Ticker": "CPRT",
+      "target_weight": -0.015,
+      "current_weight": -0.012,
+      "desired_change": -0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": -0.002999999999999999,
+      "final_weight": -0.015
+    },
+    {
+      "Ticker": "CRWD",
+      "target_weight": -0.015,
+      "current_weight": -0.012,
+      "desired_change": -0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": -0.002999999999999999,
+      "final_weight": -0.015
+    },
+    {
+      "Ticker": "CSCO",
+      "target_weight": 0.015,
+      "current_weight": 0.012,
+      "desired_change": 0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": 0.002999999999999999,
+      "final_weight": 0.015
+    },
+    {
+      "Ticker": "DDOG",
+      "target_weight": 0.015,
+      "current_weight": 0.012,
+      "desired_change": 0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": 0.002999999999999999,
+      "final_weight": 0.015
+    },
+    {
+      "Ticker": "FTNT",
+      "target_weight": 0.015,
+      "current_weight": 0.012,
+      "desired_change": 0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": 0.002999999999999999,
+      "final_weight": 0.015
+    },
+    {
+      "Ticker": "GILD",
+      "target_weight": -0.015,
+      "current_weight": -0.012,
+      "desired_change": -0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": -0.002999999999999999,
+      "final_weight": -0.015
+    },
+    {
+      "Ticker": "GOOG",
+      "target_weight": 0.015,
+      "current_weight": 0.012,
+      "desired_change": 0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": 0.002999999999999999,
+      "final_weight": 0.015
+    },
+    {
+      "Ticker": "GOOGL",
+      "target_weight": 0.015,
+      "current_weight": 0.012,
+      "desired_change": 0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": 0.002999999999999999,
+      "final_weight": 0.015
+    },
+    {
+      "Ticker": "LRCX",
+      "target_weight": -0.015,
+      "current_weight": -0.012,
+      "desired_change": -0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": -0.002999999999999999,
+      "final_weight": -0.015
+    },
+    {
+      "Ticker": "MU",
+      "target_weight": -0.015,
+      "current_weight": -0.012,
+      "desired_change": -0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": -0.002999999999999999,
+      "final_weight": -0.015
+    },
+    {
+      "Ticker": "NVDA",
+      "target_weight": 0.015,
+      "current_weight": 0.012,
+      "desired_change": 0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": 0.002999999999999999,
+      "final_weight": 0.015
+    },
+    {
+      "Ticker": "ORLY",
+      "target_weight": -0.015,
+      "current_weight": -0.012,
+      "desired_change": -0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": -0.002999999999999999,
+      "final_weight": -0.015
+    },
+    {
+      "Ticker": "PANW",
+      "target_weight": 0.015,
+      "current_weight": 0.012,
+      "desired_change": 0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": 0.002999999999999999,
+      "final_weight": 0.015
+    },
+    {
+      "Ticker": "ROP",
+      "target_weight": -0.015,
+      "current_weight": -0.012,
+      "desired_change": -0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": -0.002999999999999999,
+      "final_weight": -0.015
+    },
+    {
+      "Ticker": "SNPS",
+      "target_weight": -0.015,
+      "current_weight": -0.012,
+      "desired_change": -0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": -0.002999999999999999,
+      "final_weight": -0.015
+    },
+    {
+      "Ticker": "TEAM",
+      "target_weight": 0.015,
+      "current_weight": 0.012,
+      "desired_change": 0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": 0.002999999999999999,
+      "final_weight": 0.015
+    },
+    {
+      "Ticker": "TMUS",
+      "target_weight": -0.015,
+      "current_weight": -0.012,
+      "desired_change": -0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": -0.002999999999999999,
+      "final_weight": -0.015
+    },
+    {
+      "Ticker": "WDAY",
+      "target_weight": 0.015,
+      "current_weight": 0.012,
+      "desired_change": 0.002999999999999999,
+      "desired_turnover": 0.06,
+      "actual_change": 0.002999999999999999,
+      "final_weight": 0.015
+    }
+  ]
+}

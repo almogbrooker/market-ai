@@ -1,0 +1,16 @@
+{
+  "timestamp": "2025-08-26T16:01:49.362688",
+  "system": "NASDAQ_100_Live_Demo",
+  "test_ic": 0.006825933639512556,
+  "data_summary": {
+    "total_records": 159102,
+    "companies": 96,
+    "features": 7,
+    "clean_samples": 152862
+  },
+  "portfolio_summary": {
+    "positions": 18,
+    "gross_exposure": 0.36000000000000004,
+    "net_exposure": 0.0
+  }
+}

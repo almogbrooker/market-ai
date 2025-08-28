@@ -1,0 +1,13 @@
+{
+  "primary_model": "ultimate_production_model.pkl",
+  "model_type": "single_best",
+  "deployment_timestamp": "2025-08-27T09:01:41.774568",
+  "validation_ic": 0.05865128277794002,
+  "recent_ic": 0.07001430685126796,
+  "models_tested": 16,
+  "models_passing": 9,
+  "production_ready": true,
+  "ensemble_attempted": true,
+  "ensemble_successful": false,
+  "reason": "Single best model outperforms ensemble combinations"
+}

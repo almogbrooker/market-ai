@@ -1,0 +1,121 @@
+{
+  "feature_definitions": {
+    "momentum_5d_lag3": {
+      "calculation": "momentum_5d_lag3",
+      "description": "5-day momentum with 3-day lag",
+      "type": "momentum"
+    },
+    "momentum_10d_lag3": {
+      "calculation": "momentum_10d_lag3",
+      "description": "10-day momentum with 3-day lag",
+      "type": "momentum"
+    },
+    "momentum_20d_lag3": {
+      "calculation": "momentum_20d_lag3",
+      "description": "20-day momentum with 3-day lag",
+      "type": "momentum"
+    },
+    "momentum_60d_lag3": {
+      "calculation": "momentum_60d_lag3",
+      "description": "60-day momentum with 3-day lag",
+      "type": "momentum"
+    },
+    "volatility_10d_lag3": {
+      "calculation": "volatility_10d_lag3",
+      "description": "10-day return volatility with 3-day lag",
+      "type": "volatility"
+    },
+    "volatility_20d_lag3": {
+      "calculation": "volatility_20d_lag3",
+      "description": "20-day return volatility with 3-day lag",
+      "type": "volatility"
+    },
+    "volatility_60d_lag3": {
+      "calculation": "volatility_60d_lag3",
+      "description": "60-day return volatility with 3-day lag",
+      "type": "volatility"
+    },
+    "mean_rev_10d_lag3": {
+      "calculation": "mean_rev_10d_lag3",
+      "description": "10-day mean reversion with 3-day lag",
+      "type": "mean_reversion"
+    },
+    "mean_rev_20d_lag3": {
+      "calculation": "mean_rev_20d_lag3",
+      "description": "20-day mean reversion with 3-day lag",
+      "type": "mean_reversion"
+    },
+    "mean_rev_40d_lag3": {
+      "calculation": "mean_rev_40d_lag3",
+      "description": "40-day mean reversion with 3-day lag",
+      "type": "mean_reversion"
+    },
+    "rsi_14d_lag3": {
+      "calculation": "rsi_14d_lag3",
+      "description": "14-day RSI with 3-day lag",
+      "type": "technical"
+    },
+    "rsi_30d_lag3": {
+      "calculation": "rsi_30d_lag3",
+      "description": "30-day RSI with 3-day lag",
+      "type": "technical"
+    },
+    "vol_ratio_10d_lag3": {
+      "calculation": "vol_ratio_10d_lag3",
+      "description": "10-day volume ratio with 3-day lag",
+      "type": "volume"
+    },
+    "vol_ratio_20d_lag3": {
+      "calculation": "vol_ratio_20d_lag3",
+      "description": "20-day volume ratio with 3-day lag",
+      "type": "volume"
+    },
+    "price_pos_60d_lag3": {
+      "calculation": "price_pos_60d_lag3",
+      "description": "60-day price position with 3-day lag",
+      "type": "price_position"
+    },
+    "price_pos_252d_lag3": {
+      "calculation": "price_pos_252d_lag3",
+      "description": "252-day price position with 3-day lag",
+      "type": "price_position"
+    }
+  },
+  "feature_names": [
+    "momentum_5d_lag3",
+    "momentum_10d_lag3",
+    "momentum_20d_lag3",
+    "momentum_60d_lag3",
+    "volatility_10d_lag3",
+    "volatility_20d_lag3",
+    "volatility_60d_lag3",
+    "mean_rev_10d_lag3",
+    "mean_rev_20d_lag3",
+    "mean_rev_40d_lag3",
+    "rsi_14d_lag3",
+    "rsi_30d_lag3",
+    "vol_ratio_10d_lag3",
+    "vol_ratio_20d_lag3",
+    "price_pos_60d_lag3",
+    "price_pos_252d_lag3"
+  ],
+  "ranked_feature_names": [
+    "momentum_5d_lag3_rank",
+    "momentum_10d_lag3_rank",
+    "momentum_20d_lag3_rank",
+    "momentum_60d_lag3_rank",
+    "volatility_10d_lag3_rank",
+    "volatility_20d_lag3_rank",
+    "volatility_60d_lag3_rank",
+    "mean_rev_10d_lag3_rank",
+    "mean_rev_20d_lag3_rank",
+    "mean_rev_40d_lag3_rank",
+    "rsi_14d_lag3_rank",
+    "rsi_30d_lag3_rank",
+    "vol_ratio_10d_lag3_rank",
+    "vol_ratio_20d_lag3_rank",
+    "price_pos_60d_lag3_rank",
+    "price_pos_252d_lag3_rank"
+  ],
+  "version": "unified_v1.0"
+}

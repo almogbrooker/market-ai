@@ -1,0 +1,59 @@
+{
+  "model_type": "RandomForest",
+  "model_params": {
+    "n_estimators": 150,
+    "max_depth": 6,
+    "min_samples_leaf": 15
+  },
+  "features": [
+    "momentum_5d_lag3_rank",
+    "momentum_10d_lag3_rank",
+    "momentum_20d_lag3_rank",
+    "momentum_60d_lag3_rank",
+    "volatility_10d_lag3_rank",
+    "volatility_20d_lag3_rank",
+    "volatility_60d_lag3_rank",
+    "mean_rev_10d_lag3_rank",
+    "mean_rev_20d_lag3_rank",
+    "mean_rev_40d_lag3_rank",
+    "rsi_14d_lag3_rank",
+    "rsi_30d_lag3_rank",
+    "vol_ratio_10d_lag3_rank",
+    "vol_ratio_20d_lag3_rank",
+    "price_pos_60d_lag3_rank",
+    "price_pos_252d_lag3_rank"
+  ],
+  "feature_engine_version": "unified_v1.0",
+  "target": "target_forward",
+  "training_method": "enhanced_with_cv_and_gbdt",
+  "performance": {
+    "val_ic": 0.00399035469054712,
+    "val_std_ic": 0.10570581837960183,
+    "val_icir": 0.03774962199755488,
+    "val_consistency": 0.5169082125603864,
+    "cv_mean_ic": 0.08549259470420863,
+    "cv_icir": 1.2204238390991202,
+    "test_ic": 0.01155991750095652,
+    "test_std_ic": 0.10041409458336707,
+    "test_icir": 0.11512245902737143,
+    "test_consistency": 0.5507246376811594,
+    "val_degradation": -0.0075695628104094,
+    "cv_degradation": 0.07393267720325211
+  },
+  "data_info": {
+    "train_samples": 93566,
+    "val_samples": 19872,
+    "test_samples": 19840,
+    "companies": 96,
+    "total_features": 16,
+    "embargo_days": 5
+  },
+  "validation": {
+    "cv_splits": 5,
+    "cv_val_days": 20,
+    "embargo_days": 5,
+    "sota_report": "../artifacts/reports/sota_report_20250826T190358.md"
+  },
+  "status": "APPROVED",
+  "version": "enhanced_v2.0"
+}

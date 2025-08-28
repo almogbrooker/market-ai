@@ -1,0 +1,279 @@
+{
+  "audit_results": {
+    "individual_models": [
+      {
+        "file": "hardened_model_20250826_233616.pkl",
+        "model_type": "RandomForest",
+        "features": 16,
+        "train_ic": 0,
+        "reported_ic": 0.3535928877062599,
+        "test_ic": -0.01609764906537238,
+        "recent_ic": -0.0019522199283041706,
+        "test_pvalue": 4.8995739552307714e-05,
+        "recent_pvalue": 0.7372513880946494,
+        "top_bottom_spread": -0.001000066789043792,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083141_0.pkl",
+        "model_type": "RandomForest",
+        "features": 16,
+        "train_ic": 0.1355889015877337,
+        "reported_ic": 0.05321977051034654,
+        "test_ic": 0.05321977051034654,
+        "recent_ic": 0.06495387889833222,
+        "test_pvalue": 3.902346288063106e-41,
+        "recent_pvalue": 5.446074786876662e-29,
+        "top_bottom_spread": 0.00957484305495125,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083202_1.pkl",
+        "model_type": "RandomForest",
+        "features": 16,
+        "train_ic": 0.1945232942354733,
+        "reported_ic": 0.05865128277794002,
+        "test_ic": 0.05865128277794002,
+        "recent_ic": 0.07001430685126796,
+        "test_pvalue": 1.3476694994313142e-49,
+        "recent_pvalue": 2.012285381084892e-33,
+        "top_bottom_spread": 0.010620058976993047,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083241_2.pkl",
+        "model_type": "RandomForest",
+        "features": 16,
+        "train_ic": 0.29203025609851,
+        "reported_ic": 0.0575796647361583,
+        "test_ic": 0.0575796647361583,
+        "recent_ic": 0.06823906377725286,
+        "test_pvalue": 7.309810558951443e-48,
+        "recent_pvalue": 7.875333522669398e-32,
+        "top_bottom_spread": 0.011318405778340092,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083241_3.pkl",
+        "model_type": "LightGBM",
+        "features": 16,
+        "train_ic": 0.34246326135293764,
+        "reported_ic": 0.04146147557072523,
+        "test_ic": 0.04146147557072523,
+        "recent_ic": 0.04683390741126232,
+        "test_pvalue": 1.2938198328802018e-25,
+        "recent_pvalue": 8.080704514967554e-16,
+        "top_bottom_spread": 0.007517184551136384,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083241_4.pkl",
+        "model_type": "LightGBM",
+        "features": 16,
+        "train_ic": 0.45045296481401886,
+        "reported_ic": 0.04302019940156515,
+        "test_ic": 0.04302019940156515,
+        "recent_ic": 0.0560526227146953,
+        "test_pvalue": 1.8786213516758733e-27,
+        "recent_pvalue": 5.397818153734795e-22,
+        "top_bottom_spread": 0.007640267006479426,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083319_0.pkl",
+        "model_type": "RandomForest",
+        "features": 16,
+        "train_ic": 0.1355889015877337,
+        "reported_ic": 0.05321977051034654,
+        "test_ic": 0.05321977051034654,
+        "recent_ic": 0.06495387889833222,
+        "test_pvalue": 3.902346288063106e-41,
+        "recent_pvalue": 5.446074786876662e-29,
+        "top_bottom_spread": 0.00957484305495125,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083341_1.pkl",
+        "model_type": "RandomForest",
+        "features": 16,
+        "train_ic": 0.1945232942354733,
+        "reported_ic": 0.05865128277794002,
+        "test_ic": 0.05865128277794002,
+        "recent_ic": 0.07001430685126796,
+        "test_pvalue": 1.3476694994313142e-49,
+        "recent_pvalue": 2.012285381084892e-33,
+        "top_bottom_spread": 0.010620058976993047,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083420_2.pkl",
+        "model_type": "RandomForest",
+        "features": 16,
+        "train_ic": 0.29203025609851,
+        "reported_ic": 0.0575796647361583,
+        "test_ic": 0.0575796647361583,
+        "recent_ic": 0.06823906377725286,
+        "test_pvalue": 7.309810558951443e-48,
+        "recent_pvalue": 7.875333522669398e-32,
+        "top_bottom_spread": 0.011318405778340092,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083420_3.pkl",
+        "model_type": "LightGBM",
+        "features": 16,
+        "train_ic": 0.34246326135293764,
+        "reported_ic": 0.04146147557072523,
+        "test_ic": 0.04146147557072523,
+        "recent_ic": 0.04683390741126232,
+        "test_pvalue": 1.2938198328802018e-25,
+        "recent_pvalue": 8.080704514967554e-16,
+        "top_bottom_spread": 0.007517184551136384,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083420_4.pkl",
+        "model_type": "LightGBM",
+        "features": 16,
+        "train_ic": 0.45045296481401886,
+        "reported_ic": 0.04302019940156515,
+        "test_ic": 0.04302019940156515,
+        "recent_ic": 0.0560526227146953,
+        "test_pvalue": 1.8786213516758733e-27,
+        "recent_pvalue": 5.397818153734795e-22,
+        "top_bottom_spread": 0.007640267006479426,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083552_0.pkl",
+        "model_type": "RandomForest",
+        "features": 16,
+        "train_ic": 0.1355889015877337,
+        "reported_ic": 0.05321977051034654,
+        "test_ic": 0.05321977051034654,
+        "recent_ic": 0.06495387889833222,
+        "test_pvalue": 3.902346288063106e-41,
+        "recent_pvalue": 5.446074786876662e-29,
+        "top_bottom_spread": 0.00957484305495125,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083613_1.pkl",
+        "model_type": "RandomForest",
+        "features": 16,
+        "train_ic": 0.1945232942354733,
+        "reported_ic": 0.05865128277794002,
+        "test_ic": 0.05865128277794002,
+        "recent_ic": 0.07001430685126796,
+        "test_pvalue": 1.3476694994313142e-49,
+        "recent_pvalue": 2.012285381084892e-33,
+        "top_bottom_spread": 0.010620058976993047,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083652_2.pkl",
+        "model_type": "RandomForest",
+        "features": 16,
+        "train_ic": 0.29203025609851,
+        "reported_ic": 0.0575796647361583,
+        "test_ic": 0.0575796647361583,
+        "recent_ic": 0.06823906377725286,
+        "test_pvalue": 7.309810558951443e-48,
+        "recent_pvalue": 7.875333522669398e-32,
+        "top_bottom_spread": 0.011318405778340092,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083653_3.pkl",
+        "model_type": "LightGBM",
+        "features": 16,
+        "train_ic": 0.34246326135293764,
+        "reported_ic": 0.04146147557072523,
+        "test_ic": 0.04146147557072523,
+        "recent_ic": 0.04683390741126232,
+        "test_pvalue": 1.2938198328802018e-25,
+        "recent_pvalue": 8.080704514967554e-16,
+        "top_bottom_spread": 0.007517184551136384,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      {
+        "file": "hardened_model_20250827_083653_4.pkl",
+        "model_type": "LightGBM",
+        "features": 16,
+        "train_ic": 0.45045296481401886,
+        "reported_ic": 0.04302019940156515,
+        "test_ic": 0.04302019940156515,
+        "recent_ic": 0.0560526227146953,
+        "test_pvalue": 1.8786213516758733e-27,
+        "recent_pvalue": 5.397818153734795e-22,
+        "top_bottom_spread": 0.007640267006479426,
+        "status": "HARDENED_PRODUCTION_READY"
+      }
+    ],
+    "ensemble_models": [
+      {
+        "file": "ensemble_model_20250827_083653.pkl",
+        "method": "top_weighted",
+        "n_base_models": 7,
+        "features": 16,
+        "reported_ic": 0.05853976155394787,
+        "test_ic": 0.05853976155394787,
+        "recent_ic": 0.07026834112558737,
+        "test_pvalue": 2.049078225236308e-49,
+        "recent_pvalue": 1.1815770556728485e-33,
+        "top_bottom_spread": 0.011113446616023967,
+        "improvement": -0.00011152122399214759
+      }
+    ],
+    "best_performers": {
+      "individual": {
+        "file": "hardened_model_20250827_083202_1.pkl",
+        "model_type": "RandomForest",
+        "features": 16,
+        "train_ic": 0.1945232942354733,
+        "reported_ic": 0.05865128277794002,
+        "test_ic": 0.05865128277794002,
+        "recent_ic": 0.07001430685126796,
+        "test_pvalue": 1.3476694994313142e-49,
+        "recent_pvalue": 2.012285381084892e-33,
+        "top_bottom_spread": 0.010620058976993047,
+        "status": "HARDENED_PRODUCTION_READY"
+      },
+      "ensemble": {
+        "file": "ensemble_model_20250827_083653.pkl",
+        "method": "top_weighted",
+        "n_base_models": 7,
+        "features": 16,
+        "reported_ic": 0.05853976155394787,
+        "test_ic": 0.05853976155394787,
+        "recent_ic": 0.07026834112558737,
+        "test_pvalue": 2.049078225236308e-49,
+        "recent_pvalue": 1.1815770556728485e-33,
+        "top_bottom_spread": 0.011113446616023967,
+        "improvement": -0.00011152122399214759
+      }
+    },
+    "qa_validation": {}
+  },
+  "qa_results": {
+    "performance_qa": {
+      "individual_avg_ic": 0.046606220620302084,
+      "good_individual_count": 15,
+      "ensemble_improvement": -0.00011152122399214759,
+      "ensemble_better": "False"
+    },
+    "stability_qa": {
+      "recent_avg_ic": 0.057270569939382995,
+      "stable_model_count": 15
+    },
+    "production_readiness": {
+      "individual_ready": 15,
+      "ensemble_ready": 1
+    },
+    "recommendations": [
+      "\u2705 Use ensemble model for production - better performance and stability",
+      "\ud83d\udd04 Ensemble not improving - try different combination methods"
+    ]
+  },
+  "audit_timestamp": "2025-08-27T08:55:41.621969"
+}

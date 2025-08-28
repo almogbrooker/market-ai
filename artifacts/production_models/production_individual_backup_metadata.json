@@ -1,0 +1,52 @@
+{
+  "model_type": "LightGBM",
+  "model_params": {
+    "boosting_type": "gbdt",
+    "class_weight": null,
+    "colsample_bytree": 1.0,
+    "importance_type": "split",
+    "learning_rate": 0.05,
+    "max_depth": -1,
+    "min_child_samples": 20,
+    "min_child_weight": 0.001,
+    "min_split_gain": 0.0,
+    "n_estimators": 150,
+    "n_jobs": null,
+    "num_leaves": 64,
+    "objective": null,
+    "random_state": 46,
+    "reg_alpha": 0.0,
+    "reg_lambda": 0.0,
+    "subsample": 1.0,
+    "subsample_for_bin": 200000,
+    "subsample_freq": 0,
+    "verbose": -1
+  },
+  "performance": {
+    "train_ic": 0.45045296481401886,
+    "final_ic": 0.04302019940156515,
+    "cv_ic_mean": 0.04302019940156515,
+    "cv_ic_std": 0.012906059820469546
+  },
+  "features": [
+    "momentum_5d_lag3_rank",
+    "momentum_10d_lag3_rank",
+    "momentum_20d_lag3_rank",
+    "momentum_60d_lag3_rank",
+    "volatility_10d_lag3_rank",
+    "volatility_20d_lag3_rank",
+    "volatility_60d_lag3_rank",
+    "mean_rev_10d_lag3_rank",
+    "mean_rev_20d_lag3_rank",
+    "mean_rev_40d_lag3_rank",
+    "rsi_14d_lag3_rank",
+    "rsi_30d_lag3_rank",
+    "vol_ratio_10d_lag3_rank",
+    "vol_ratio_20d_lag3_rank",
+    "price_pos_60d_lag3_rank",
+    "price_pos_252d_lag3_rank"
+  ],
+  "status": "HARDENED_PRODUCTION_READY",
+  "created": "2025-08-27T08:36:53.379269",
+  "version": "hardened_lgb_deep"
+}

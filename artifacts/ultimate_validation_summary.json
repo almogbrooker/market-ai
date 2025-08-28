@@ -1,0 +1,14 @@
+{
+  "models_tested": 16,
+  "models_passing_strict": 9,
+  "best_model": {
+    "file": "hardened_model_20250827_083202_1",
+    "type": "RandomForest",
+    "ic_test": 0.05865128277794002,
+    "ic_recent": 0.07001430685126796,
+    "spread": 0.010620058976993047
+  },
+  "ensemble_status": "not_improving",
+  "production_ready": true,
+  "timestamp": "2025-08-27T09:01:41.774657"
+}

@@ -1,0 +1,51 @@
+{
+  "model_type": "RandomForest",
+  "model_params": {
+    "n_estimators": 150,
+    "max_depth": 6,
+    "test_ic": 0.3535928877062599
+  },
+  "features": [
+    "momentum_5d_lag3_rank_rank",
+    "momentum_10d_lag3_rank_rank",
+    "momentum_20d_lag3_rank_rank",
+    "momentum_60d_lag3_rank_rank",
+    "volatility_10d_lag3_rank_rank",
+    "volatility_20d_lag3_rank_rank",
+    "volatility_60d_lag3_rank_rank",
+    "mean_rev_10d_lag3_rank_rank",
+    "mean_rev_20d_lag3_rank_rank",
+    "mean_rev_40d_lag3_rank_rank",
+    "rsi_14d_lag3_rank_rank",
+    "rsi_30d_lag3_rank_rank",
+    "vol_ratio_10d_lag3_rank_rank",
+    "vol_ratio_20d_lag3_rank_rank",
+    "price_pos_60d_lag3_rank_rank",
+    "price_pos_252d_lag3_rank_rank"
+  ],
+  "training_method": "hardened_with_ultra_strict_controls",
+  "hardening_measures": {
+    "enforce_strict_lag": true,
+    "min_feature_lag_days": 3,
+    "forbid_backfill": true,
+    "cv_embargo_days": 10,
+    "prediction_embargo_days": 7,
+    "recency_weighting": true,
+    "sample_weighting": true,
+    "temporal_gap_enforcement": true
+  },
+  "performance": {
+    "cv_ic_mean": 0.015099325182190374,
+    "cv_ic_std": 0.009488911036584587,
+    "final_ic": 0.3535928877062599,
+    "leakage_prevention_verified": true
+  },
+  "data_info": {
+    "total_features": 16,
+    "embargo_days": 10,
+    "min_lag_days": 3
+  },
+  "status": "HARDENED_PRODUCTION_READY",
+  "created": "2025-08-26T23:35:13.026699",
+  "version": "hardened_v1.0"
+}

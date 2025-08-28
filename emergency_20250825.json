@@ -1,0 +1,37 @@
+[
+  {
+    "timestamp": "2025-08-25T16:42:34.246179",
+    "error": "forbidden.",
+    "action": "emergency_stop"
+  },
+  {
+    "timestamp": "2025-08-25T17:42:35.466934",
+    "error": "forbidden.",
+    "action": "emergency_stop"
+  },
+  {
+    "timestamp": "2025-08-25T18:42:36.715436",
+    "error": "forbidden.",
+    "action": "emergency_stop"
+  },
+  {
+    "timestamp": "2025-08-25T19:42:37.946815",
+    "error": "forbidden.",
+    "action": "emergency_stop"
+  },
+  {
+    "timestamp": "2025-08-25T20:42:39.200174",
+    "error": "forbidden.",
+    "action": "emergency_stop"
+  },
+  {
+    "timestamp": "2025-08-25T21:42:40.424278",
+    "error": "forbidden.",
+    "action": "emergency_stop"
+  },
+  {
+    "timestamp": "2025-08-25T22:42:41.656310",
+    "error": "forbidden.",
+    "action": "emergency_stop"
+  }
+]

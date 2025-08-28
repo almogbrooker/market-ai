@@ -1,0 +1,77 @@
+{
+  "model_type": "RandomForest",
+  "model_params": {
+    "bootstrap": true,
+    "ccp_alpha": 0.0,
+    "criterion": "squared_error",
+    "max_depth": 6,
+    "max_features": 1.0,
+    "max_leaf_nodes": null,
+    "max_samples": null,
+    "min_impurity_decrease": 0.0,
+    "min_samples_leaf": 30,
+    "min_samples_split": 2,
+    "min_weight_fraction_leaf": 0.0,
+    "monotonic_cst": null,
+    "n_estimators": 150,
+    "n_jobs": null,
+    "oob_score": false,
+    "random_state": 43,
+    "verbose": 0,
+    "warm_start": false
+  },
+  "performance": {
+    "train_ic": 0.1945232942354733,
+    "final_ic": 0.05865128277794002,
+    "cv_ic_mean": 0.05865128277794002,
+    "cv_ic_std": 0.017595384833382004
+  },
+  "features": [
+    "momentum_5d_lag3_rank",
+    "momentum_10d_lag3_rank",
+    "momentum_20d_lag3_rank",
+    "momentum_60d_lag3_rank",
+    "volatility_10d_lag3_rank",
+    "volatility_20d_lag3_rank",
+    "volatility_60d_lag3_rank",
+    "mean_rev_10d_lag3_rank",
+    "mean_rev_20d_lag3_rank",
+    "mean_rev_40d_lag3_rank",
+    "rsi_14d_lag3_rank",
+    "rsi_30d_lag3_rank",
+    "vol_ratio_10d_lag3_rank",
+    "vol_ratio_20d_lag3_rank",
+    "price_pos_60d_lag3_rank",
+    "price_pos_252d_lag3_rank"
+  ],
+  "status": "HARDENED_PRODUCTION_READY",
+  "created": "2025-08-27T08:32:02.689860",
+  "version": "hardened_rf_balanced",
+  "final_deployment": "2025-08-27T09:05:38.119578",
+  "deployment_type": "single_best_model",
+  "ensemble_rejected": true,
+  "ensemble_reason": "Single model outperforms ensemble combinations",
+  "validation_summary": {
+    "models_tested": 16,
+    "models_passing_strict": 9,
+    "best_model": {
+      "file": "hardened_model_20250827_083202_1",
+      "type": "RandomForest",
+      "ic_test": 0.05865128277794002,
+      "ic_recent": 0.07001430685126796,
+      "spread": 0.010620058976993047
+    },
+    "ensemble_status": "not_improving",
+    "production_ready": true,
+    "timestamp": "2025-08-27T09:01:41.774657"
+  },
+  "production_status": "FINAL_PRODUCTION_READY",
+  "original_file": "hardened_model_20250827_083202_1.pkl",
+  "ic_methodology_fix": {
+    "issue_identified": "Daily IC calculation inflated compared to CV IC",
+    "fix_applied": "Use cross-validation IC as primary metric",
+    "cross_validation_ic": 0.0587,
+    "daily_ic_note": "Daily ICs are for monitoring only, not validation",
+    "fix_timestamp": "2025-08-27T09:10:11.548255"
+  }
+}

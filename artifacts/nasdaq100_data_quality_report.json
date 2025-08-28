@@ -1,0 +1,232 @@
+{
+  "pipeline_status": "SUCCESS",
+  "timestamp": "2025-08-26T11:30:09.675858",
+  "symbols_requested": 100,
+  "symbols_with_data": 96,
+  "total_records": 159102,
+  "date_range": {
+    "start": "2019-01-02 00:00:00-05:00",
+    "end": "2025-08-25 00:00:00-04:00",
+    "days": 2426
+  },
+  "output_file": "/home/almog/market-ai/artifacts/nasdaq100_data.parquet",
+  "file_size_mb": 5.84,
+  "data_quality_report": {
+    "raw_data_quality": {
+      "timestamp": "2025-08-26T11:30:05.746620",
+      "dataset_overview": {
+        "total_records": 159102,
+        "unique_tickers": 96,
+        "date_range": {
+          "start": "2019-01-02 00:00:00-05:00",
+          "end": "2025-08-25 00:00:00-04:00",
+          "days": 2426
+        }
+      },
+      "completeness_validation": {
+        "total_records": 159102,
+        "missing_values": {
+          "Date": {
+            "count": 0,
+            "percentage": 0.0
+          },
+          "Ticker": {
+            "count": 0,
+            "percentage": 0.0
+          },
+          "Open": {
+            "count": 0,
+            "percentage": 0.0
+          },
+          "High": {
+            "count": 0,
+            "percentage": 0.0
+          },
+          "Low": {
+            "count": 0,
+            "percentage": 0.0
+          },
+          "Close": {
+            "count": 0,
+            "percentage": 0.0
+          },
+          "Volume": {
+            "count": 0,
+            "percentage": 0.0
+          }
+        },
+        "completeness_score": 100.0
+      },
+      "accuracy_validation": {
+        "price_validation": {
+          "Open": {
+            "negative_values": 0,
+            "zero_values": 0,
+            "min_value": 1.378999948501587,
+            "max_value": 5815.0
+          },
+          "High": {
+            "negative_values": 0,
+            "zero_values": 0,
+            "min_value": 1.4950000047683716,
+            "max_value": 5839.41015625
+          },
+          "Low": {
+            "negative_values": 0,
+            "zero_values": 0,
+            "min_value": 1.378999948501587,
+            "max_value": 5707.93017578125
+          },
+          "Close": {
+            "negative_values": 0,
+            "zero_values": 0,
+            "min_value": 1.472000002861023,
+            "max_value": 5815.919921875
+          },
+          "high_low_consistency": {
+            "invalid_count": 0
+          }
+        },
+        "volume_validation": {
+          "negative_volume": 0,
+          "zero_volume": 2,
+          "avg_volume": 14918254.524022326
+        },
+        "date_validation": {
+          "date_gaps_count": 0,
+          "largest_gap_days": 0
+        },
+        "accuracy_score": 100.0
+      },
+      "consistency_validation": {
+        "ticker_consistency": {
+          "total_tickers": 96,
+          "insufficient_data_tickers": [],
+          "avg_records_per_ticker": 1657.31
+        },
+        "temporal_consistency": {
+          "date_range_days": 2426,
+          "total_unique_dates": 1671
+        },
+        "consistency_score": 100.0
+      },
+      "overall_quality_score": 100.0,
+      "quality_assessment": {
+        "overall_score": 100.0,
+        "quality_level": "EXCELLENT",
+        "recommendation": "Data is excellent quality and ready for production use."
+      }
+    },
+    "cleaned_data_quality": {
+      "timestamp": "2025-08-26T11:30:07.689488",
+      "dataset_overview": {
+        "total_records": 159102,
+        "unique_tickers": 96,
+        "date_range": {
+          "start": "2019-01-02 00:00:00-05:00",
+          "end": "2025-08-25 00:00:00-04:00",
+          "days": 2426
+        }
+      },
+      "completeness_validation": {
+        "total_records": 159102,
+        "missing_values": {
+          "Date": {
+            "count": 0,
+            "percentage": 0.0
+          },
+          "Ticker": {
+            "count": 0,
+            "percentage": 0.0
+          },
+          "Open": {
+            "count": 0,
+            "percentage": 0.0
+          },
+          "High": {
+            "count": 0,
+            "percentage": 0.0
+          },
+          "Low": {
+            "count": 0,
+            "percentage": 0.0
+          },
+          "Close": {
+            "count": 0,
+            "percentage": 0.0
+          },
+          "Volume": {
+            "count": 0,
+            "percentage": 0.0
+          }
+        },
+        "completeness_score": 100.0
+      },
+      "accuracy_validation": {
+        "price_validation": {
+          "Open": {
+            "negative_values": 0,
+            "zero_values": 0,
+            "min_value": 1.378999948501587,
+            "max_value": 5815.0
+          },
+          "High": {
+            "negative_values": 0,
+            "zero_values": 0,
+            "min_value": 1.4950000047683716,
+            "max_value": 5839.41015625
+          },
+          "Low": {
+            "negative_values": 0,
+            "zero_values": 0,
+            "min_value": 1.378999948501587,
+            "max_value": 5707.93017578125
+          },
+          "Close": {
+            "negative_values": 0,
+            "zero_values": 0,
+            "min_value": 1.472000002861023,
+            "max_value": 5815.919921875
+          },
+          "high_low_consistency": {
+            "invalid_count": 0
+          }
+        },
+        "volume_validation": {
+          "negative_volume": 0,
+          "zero_volume": 2,
+          "avg_volume": 14918254.524022326
+        },
+        "date_validation": {
+          "date_gaps_count": 0,
+          "largest_gap_days": 0
+        },
+        "accuracy_score": 100.0
+      },
+      "consistency_validation": {
+        "ticker_consistency": {
+          "total_tickers": 96,
+          "insufficient_data_tickers": [],
+          "avg_records_per_ticker": 1657.31
+        },
+        "temporal_consistency": {
+          "date_range_days": 2426,
+          "total_unique_dates": 1671
+        },
+        "consistency_score": 100.0
+      },
+      "overall_quality_score": 100.0,
+      "quality_assessment": {
+        "overall_score": 100.0,
+        "quality_level": "EXCELLENT",
+        "recommendation": "Data is excellent quality and ready for production use."
+      }
+    },
+    "cleaning_summary": {
+      "records_before_cleaning": 159102,
+      "records_after_cleaning": 159102,
+      "records_removed": 0,
+      "removal_percentage": 0.0
+    }
+  }
+}

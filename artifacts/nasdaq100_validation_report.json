@@ -1,0 +1,18 @@
+{
+  "timestamp": "2025-08-26T11:34:41.806725",
+  "model_type": "RandomForest",
+  "test_ic": 0.009106735876061508,
+  "companies": 96,
+  "tests_passed": 5,
+  "total_tests": 6,
+  "pass_rate": 0.8333333333333334,
+  "overall_status": "PASS",
+  "test_results": {
+    "Model Performance": false,
+    "Placebo Test": true,
+    "Model Stability": true,
+    "IC Consistency": true,
+    "Business Value": true,
+    "Data Quality": true
+  }
+}
